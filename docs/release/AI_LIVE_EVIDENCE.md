@@ -1,8 +1,8 @@
 # Live AI Evidence
 
-**Date:** 2026-11-02  
-**Source revision:** `6ae608c166a3bdf16e3225cbf939ccb1e9d81df0` plus uncommitted local worktree changes  
-**State:** BLOCKED; genuine inference did not pass.
+**Date:** 2026-11-02
+**Source revision:** `2b7c45b87e404ea5dbf85e7abb07310a2ac196e9` plus uncommitted browser-test/report changes
+**State:** FAIL; genuine inference did not pass.
 
 ## Attempt
 

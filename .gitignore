@@ -17,6 +17,7 @@ build/
 dealbot.log
 commerce.db
 .coverage
+coverage.xml
 htmlcov/
 playwright-report/
 test-results/

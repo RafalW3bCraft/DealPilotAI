@@ -1,7 +1,8 @@
 # PayPal Sandbox Evidence
 
-**Date:** 2026-11-02  
-**Environment:** sandbox only  
+**Date:** 2026-11-02
+**Source revision:** `2b7c45b87e404ea5dbf85e7abb07310a2ac196e9`
+**Environment:** sandbox only
 **State:** BLOCKED; OAuth passed, but no buyer-approved capture was performed.
 
 ## Verified

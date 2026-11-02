@@ -1,6 +1,6 @@
 # DealPilotAI Demo Runbook
 
-**Target recording length:** 170 seconds (within the 165-175 second requirement).  
+**Target recording length:** 170 seconds (within the 165-175 second requirement).
 **Status:** Preparation only; do not record a fake AI result or payment. The live provider and buyer-approved capture gates are currently blocked.
 
 ## Before recording

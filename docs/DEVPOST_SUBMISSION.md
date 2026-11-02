@@ -4,7 +4,7 @@
 
 ## Project title
 
-DealPilotAI - Conversational Commerce with Verified PayPal Checkout
+DealPilotAI — Conversational Commerce with Verified PayPal Checkout
 
 ## Tagline
 
@@ -13,6 +13,10 @@ An AI shopping assistant that turns natural-language product discovery into secu
 ## The problem
 
 Online discovery and checkout can be disconnected, and shoppers may have difficulty comparing products against a budget. A trustworthy assistant must use an authorized product source, preserve actual merchant prices, and keep the shopper in control of payment.
+
+## Target customers
+
+The prototype is aimed at shoppers who want conversational product discovery and small merchants who need a controlled catalog-to-checkout experience. The separate affiliate lane is for deal publishers using Telegram and Amazon referral links.
 
 ## What DealPilotAI does
 

@@ -44,6 +44,9 @@ jobs:
       - name: Ruff correctness checks
         run: python -m ruff check .
 
+      - name: Install Chromium for browser tests
+        run: python -m playwright install --with-deps chromium
+
       - name: Unit and integration tests
         run: python -m pytest -q --junitxml=junit.xml
 

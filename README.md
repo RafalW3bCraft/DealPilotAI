@@ -1,4 +1,4 @@
-# DealPilotAI - AI-Powered Conversational Commerce with PayPal
+# DealPilotAI — AI-Powered Conversational Commerce with PayPal
 
 DealPilotAI is a Flask application that combines natural-language product discovery with a merchant-owned catalog, cart quoting, and a PayPal Orders v2 sandbox checkout. A separate legacy lane supports Telegram deal discovery and Amazon affiliate referrals.
 
@@ -61,6 +61,7 @@ cd DealPilotAI
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r requirements-dev.txt
+python -m playwright install --with-deps chromium
 cp .env.example .env
 ```
 
@@ -77,9 +78,10 @@ Open `http://127.0.0.1:5000/shop`. To run diagnostics:
 ```bash
 python scripts/config_check.py
 python scripts/ai_smoke.py
+python scripts/ai_release_smoke.py
 ```
 
-`ai_smoke.py` requires valid provider access and exits nonzero when the result falls back. Never commit `.env`; provide secrets through an approved secret manager in hosted environments.
+`ai_smoke.py` requires valid provider access and exits nonzero when the result falls back. `ai_release_smoke.py` runs English, Hindi, budget, multi-item cart, unsupported-product, schema, grounding, and malicious-catalog scenarios against the real configured provider; it never invokes checkout. Never commit `.env`; provide secrets through an approved secret manager in hosted environments.
 
 ## Environment and profiles
 
@@ -108,11 +110,13 @@ python -m compileall -q .
 python -m pip check
 python -m pytest -q
 python -m pytest --cov=ai --cov=commerce --cov=paypal_checkout --cov=web --cov-report=term-missing
+python -m playwright install --with-deps chromium
+python -m pytest -q
 python -m ruff check .
 python -m pip_audit -r requirements.lock
 ```
 
-The latest clean local run collected 146 tests: 146 passed, 0 failed, 0 skipped; targeted coverage was 76%. `ruff check .` now runs the explicit correctness rule set in `pyproject.toml`; a broader pre-profile scan found 336 legacy style/modernization findings and is not represented as clean. The dependency audit found no known vulnerabilities in the pinned lockfile. Full details and caveats are in [TEST_REPORT.md](docs/release/TEST_REPORT.md). GitHub Actions has not yet run on the submission candidate.
+GitHub Actions run [41409296241](https://github.com/RafalW3bCraft/DealPilotAI/actions/runs/41409296241) on `2b7c45b` passed 146 tests (0 failures, 6 warnings), 76% targeted coverage, Ruff correctness checks, and dependency audit; it failed at Gitleaks on false positives from blank key assignments in the test report. Those examples have been removed locally, but the fix has not been pushed or rerun. A separate Playwright checkout test is now in the worktree; local Chromium could not start because this container lacks `libatk-1.0.so.0`, and CI has not yet run that test. `ruff check .` uses the explicit correctness rule set in `pyproject.toml`; a broader pre-profile scan found 336 legacy findings. See [the test report](docs/release/TEST_REPORT.md), [CI evidence](docs/release/CI_EVIDENCE.md), and [browser evidence](docs/release/BROWSER_EVIDENCE.md).
 
 ## Security and limitations
 
