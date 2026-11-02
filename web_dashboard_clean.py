@@ -13,11 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 def require_dashboard_auth(config: Config):
-    """Decorator factory: protect privileged routes with DASHBOARD_TOKEN.
+    """Decorator factory: require DASHBOARD_TOKEN via Authorization: Bearer.
 
-    Token is accepted via `Authorization: Bearer <token>` header or `?token=`
-    query param (for the HTML pages). When no token is configured and the app
-    is not in DEMO_MODE, privileged routes are disabled (404) rather than open.
+    Query-string tokens are intentionally rejected; merchant dashboard auth is
+    session- and bearer-header-based only. When no token is configured and the
+    app is not in DEMO_MODE, privileged routes are disabled (404) rather than
+    open.
     """
     def decorator(view):
         @functools.wraps(view)
@@ -29,11 +30,10 @@ def require_dashboard_auth(config: Config):
                     return view(*args, **kwargs)  # demo mode: open, clearly labeled in UI
                 abort(404)  # fail closed: privileged route disabled
             provided = request.headers.get('Authorization', '')
-            if provided.startswith('Bearer '):
-                provided = provided[7:]
-            else:
-                provided = request.args.get('token', '')
+            if not provided.startswith('Bearer '):
+                return jsonify({'error': 'authentication required'}), 401
             import hmac
+            provided = provided[7:]
             if not provided or not hmac.compare_digest(provided, token):
                 return jsonify({'error': 'authentication required'}), 401
             return view(*args, **kwargs)

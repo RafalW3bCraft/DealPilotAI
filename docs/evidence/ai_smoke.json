@@ -1,7 +1,7 @@
 {
-  "timestamp_utc": "2026-10-31T06:19:06.055142+00:00",
+  "timestamp_utc": "2026-11-02T07:39:28.569489+00:00",
   "provider": "deterministic-fallback(provider-error:PermissionDeniedError)",
-  "model": "provider-default",
+  "model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
   "fallback": true,
   "query": "Find the best desk setup under $80. I prefer a compact LED lamp and a desk organizer. Explain the tradeoffs.",
   "items": [

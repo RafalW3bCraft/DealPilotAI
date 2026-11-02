@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlparse
 
 from .cart_service import CartService
 from .exceptions import (
@@ -105,10 +106,34 @@ class CheckoutService:
         self.storage.require_transition(attempt_id, new, (current,))
 
     @staticmethod
+    def _trusted_paypal_approval_url(href: str | None) -> bool:
+        if not href:
+            return False
+        try:
+            parsed = urlparse(href)
+        except Exception:
+            return False
+        if parsed.scheme != "https":
+            return False
+        host = (parsed.hostname or "").lower()
+        if not host:
+            return False
+        return (
+            host == "paypal.com"
+            or host.endswith(".paypal.com")
+            or host == "paypal.test"
+            or host.endswith(".paypal.test")
+        )
+
+    @staticmethod
     def _approve_url(order: dict) -> str | None:
         for link in order.get("links", []) or []:
-            if link.get("rel") == "approve":
-                return link.get("href")
+            if link.get("rel") != "approve":
+                continue
+            href = link.get("href")
+            if not CheckoutService._trusted_paypal_approval_url(href):
+                continue
+            return href
         return None
 
     @staticmethod
@@ -136,10 +161,17 @@ class CheckoutService:
         existing = self.storage.get_attempt(request_id=request_id)
         if existing is not None and existing.status not in TERMINAL:
             # Idempotent replay: return the same attempt, no new gateway call.
+            approve_url = None
+            if existing.paypal_order_id:
+                try:
+                    order = self.gateway.get_order(existing.paypal_order_id)
+                    approve_url = self._approve_url(order)
+                except Exception:
+                    approve_url = None
             return {
                 "attempt_id": existing.id,
                 "paypal_order_id": existing.paypal_order_id,
-                "approve_url": None,
+                "approve_url": approve_url,
                 "status": existing.status,
             }
 

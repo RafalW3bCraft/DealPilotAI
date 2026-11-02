@@ -113,7 +113,7 @@ class AIShoppingService:
 
         selection = select_provider(config)
         if selection["name"]:
-            self._client = self._build_openai_client(**selection["client_kwargs"])
+            self._client = type(self)._build_openai_client(**selection["client_kwargs"])
             self.provider_name = selection["name"]
             self.model = selection["model"]
         # else: no provider -> deterministic fallback only

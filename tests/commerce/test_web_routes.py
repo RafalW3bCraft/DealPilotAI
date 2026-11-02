@@ -219,6 +219,7 @@ def test_merchant_auth_matrix(monkeypatch, tmp_path):
                     FLASK_SECRET_KEY='x' * 32, DASHBOARD_TOKEN='sekrit-token')
     client = app.test_client()
     assert client.get('/merchant').status_code == 401
+    assert client.get('/merchant?token=sekrit-token').status_code == 401
     resp = client.get('/merchant', headers={'Authorization': 'Bearer sekrit-token'})
     assert resp.status_code == 200
 

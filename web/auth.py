@@ -1,8 +1,8 @@
 """Auth/session helpers for the DealPilot web layer.
 
 Buyer identity is a random actor id in the Flask session cookie. Merchant
-access is gated by DASHBOARD_TOKEN (Bearer header or ?token=) with a
-demo-mode bypass that is clearly labeled in the UI.
+access is gated by DASHBOARD_TOKEN via the Authorization: Bearer header with a
+demo-mode bypass clearly labeled in the UI.
 """
 import functools
 import hmac
@@ -83,10 +83,9 @@ def _merchant_token_valid(config):
     if not token:
         return None  # no token configured
     provided = request.headers.get('Authorization', '')
-    if provided.startswith('Bearer '):
-        provided = provided[7:]
-    else:
-        provided = request.args.get('token', '')
+    if not provided.startswith('Bearer '):
+        return False
+    provided = provided[7:]
     return bool(provided) and hmac.compare_digest(str(provided), token)
 
 
@@ -102,9 +101,9 @@ def is_merchant(config):
 
 
 def require_merchant(view):
-    """Merchant gate: DASHBOARD_TOKEN via Bearer or ?token=. With no token
-    configured: 404 in production (fail closed), allowed in DEMO_MODE with a
-    visible banner (templates read `demo_mode`)."""
+    """Merchant gate: DASHBOARD_TOKEN via Authorization: Bearer only. With no
+    token configured: 404 in production (fail closed), allowed in DEMO_MODE with
+    a visible banner (templates read `demo_mode`)."""
     @functools.wraps(view)
     def wrapper(*args, **kwargs):
         config = current_app.extensions['dealpilot']['config']

@@ -1,488 +1,133 @@
-# Amazon Affiliate Bot
+# DealPilotAI - AI-Powered Conversational Commerce with PayPal
 
-A comprehensive Python-based Amazon affiliate marketing bot that automates deal discovery, product search, and affiliate link management with Telegram integration and web dashboard analytics.
+DealPilotAI is a Flask application that combines natural-language product discovery with a merchant-owned catalog, cart quoting, and a PayPal Orders v2 sandbox checkout. A separate legacy lane supports Telegram deal discovery and Amazon affiliate referrals.
 
----
+**Release status (2026-11-02): not verified for hackathon submission.** The automated suite passes locally, but the live AI request did not produce structured output, no buyer-approved PayPal capture has been evidenced, and no GitHub Actions run or browser checkout run has been recorded. See [the release gate matrix](docs/release/RELEASE_GATE_MATRIX.md).
 
-## 🚀 Features
+## Problem and solution
 
-### Core Functionality
-- **🤖 Telegram Bot**: Interactive bot for deal discovery and product search
-- **🌐 Web Dashboard**: Real-time analytics and management interface
-- **🛍️ Deal Scraping**: Automated scraping of Amazon deals (Today's Deals, Lightning Deals, Best Deals)
-- **🔍 Keyword Search**: Search Amazon products by keyword with affiliate tags
-- **🖼️ Image Extraction**: Automatic product image extraction and display
-- **✅ Link Validation**: Comprehensive affiliate link validation and tag verification
-- **📊 Analytics**: Track deal posts and link clicks (tracked clicks only — not verified affiliate revenue)
-- **🤖 AI Content Generation**: OpenAI- or Featherless-powered content generation (deterministic template fallback when no provider key is set)
+Shopping discovery is often disconnected from checkout. DealPilotAI demonstrates a conversational path from a request to catalog-grounded recommendations and a cart, while keeping merchant-authorized products and Amazon affiliate referrals in distinct flows. A human must approve PayPal sandbox payment; the AI cannot authorize or capture a payment.
 
-### Advanced Features
-- **Deal Quality Scoring**: Filters deals by discount, rating, and review count
-- **Affiliate Tag Verification**: Ensures affiliate tags persist after redirects
-- **Multi-Region Support**: US, UK, DE, FR, CA, JP, AU, IN
-- **Deal of the Day Integration**: Dedicated method for featured deals
-- **Rate Limiting**: Smart rate limiting with exponential backoff
-- **Error Handling**: Comprehensive error handling and logging
+## Current features
 
----
+- Merchant catalog with server-authoritative SKU, price, currency, active status, and stock.
+- AI recommendation service with strict Pydantic validation, catalog grounding, prompt-injection boundaries, and a clearly labeled deterministic fallback.
+- Decimal cart totals, quote expiration, ownership checks, and configured cart limits.
+- PayPal Orders v2 client restricted to sandbox, with request idempotency and typed ambiguous-error handling.
+- Durable commerce storage and webhook signature-verification/retry code paths.
+- Flask shop, cart, checkout return, receipt, and merchant routes.
+- Separate Telegram/Amazon affiliate lane; an affiliate referral does not use this app's PayPal checkout.
 
-## 📋 Requirements
+These are implemented capabilities, not claims that external live gates have passed. See the [test report](docs/release/TEST_REPORT.md) and [remaining blockers](docs/release/REMAINING_BLOCKERS.md).
 
-- **Python**: 3.11 or newer
-- **Database**: PostgreSQL (recommended) or in-memory database for testing
-- **API Keys**:
-  - Telegram Bot Token (from [@BotFather](https://t.me/botfather))
-  - Amazon Affiliate ID (from [Amazon Associates](https://affiliate-program.amazon.com/))
-  - OpenAI API Key or Featherless API Key (optional, for AI content generation; otherwise a deterministic non-AI template fallback is used)
+## Screenshots and demo
 
-## 🧭 Production Readiness Notes
+No genuine application screenshots, hosted demo, or public demo video are currently available in this repository. Do not use mock payment states as evidence. The [demo runbook](docs/DEMO_RUNBOOK.md) describes the recording sequence and identifies the still-required live steps.
 
-- This project depends on external services (Amazon pages, Telegram API, and optionally OpenAI + PostgreSQL).  
-- Network or provider failures can reduce functionality even when local code starts correctly.  
-- Run diagnostics before deployment:
-  - `python -m py_compile *.py`
-  - `python main.py test`
-  - `python main.py web`
-- There is currently no comprehensive automated test suite in the repository; add tests before production use.
+## Architecture
 
----
+```text
+Shopper -> Flask shop -> AIShoppingService -> merchant catalog
+                         |                    (SKU/price re-grounding)
+                         v
+                    cart quote -> CheckoutService -> PayPal Orders v2 sandbox
+                                      |                    |
+                                      v                    v
+                              durable storage       buyer approval
+                                      ^
+                                      |
+                           verified webhook + retry
 
-## 🛠️ Installation
+Telegram deal lane -> Amazon affiliate referral -> Amazon
+```
 
-### 1. Clone the Repository
+The PayPal checkout is only for the separate merchant-owned catalog. Amazon affiliate links send buyers to Amazon and are not processed as PayPal orders.
+
+## AI provider
+
+The provider is selected with `AI_PROVIDER=openai` or `AI_PROVIDER=featherless`; provider credentials are `OPENAI_API_KEY` and `FEATHERLESS_API_KEY`. `AI_MODEL` selects the model. The current live attempt used Featherless and `Qwen/Qwen3.8-27B`, but returned an empty completion; the smoke test correctly reported `fallback=true`. The provider's default model was also rejected with a permission error. Real inference is therefore **not verified**. Check API-key status, model entitlement, and JSON-mode support before claiming an AI pass. See [AI live evidence](docs/release/AI_LIVE_EVIDENCE.md).
+
+## PayPal sandbox
+
+The integration uses PayPal Orders v2 and refuses live PayPal endpoints. A read-only sandbox OAuth probe succeeded on 2026-11-02. No current buyer approval, capture ID, receipt-after-restart, or real signed webhook is evidenced. See [PayPal evidence](docs/release/PAYPAL_SANDBOX_EVIDENCE.md) and [webhook evidence](docs/release/WEBHOOK_EVIDENCE.md).
+
+## Requirements and installation
+
+Python 3.11 or newer is required by the application. The current clean test environment used Python 3.14.2.
 
 ```bash
-git clone https://github.com/RafalW3bCraft/AmazonAffiliatedBot.git
-cd AmazonAffiliatedBot
+git clone https://github.com/RafalW3bCraft/DealPilotAI.git
+cd DealPilotAI
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+cp .env.example .env
 ```
 
-### 2. Create Virtual Environment (Recommended)
+The checked-in `.env.example` is an offline-demo profile. It enables the catalog routes, but contains no PayPal or AI credentials; checkout cannot create a PayPal order until sandbox credentials are configured. Its Flask secret is demo-only and must not be used for a public deployment.
 
-```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+Start the web application:
 
-### 3. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-Or install directly:
-```bash
-pip install .
-```
-
----
-
-## ⚙️ Configuration
-
-### Environment Variables
-
-Create a `.env` file in the project root:
-
-```env
-# Telegram Configuration
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-TELEGRAM_CHANNEL=@your_telegram_channel
-
-# Amazon Affiliate
-AMAZON_AFFILIATE_ID=one4allmarket-21
-
-# Optional: Regional Affiliate IDs
-AMAZON_AFFILIATE_ID_UK=your_uk_affiliate_id
-AMAZON_AFFILIATE_ID_DE=your_de_affiliate_id
-# ... etc for other regions
-
-# OpenAI (Optional - for AI content generation)
-OPENAI_API_KEY=your_openai_api_key
-
-# Database Configuration
-DATABASE_URL=postgresql://user:password@host/database?sslmode=require
-PGDATABASE=your_database
-PGHOST=your_host
-PGPASSWORD=your_password
-PGUSER=your_user
-
-# Application Settings
-MAX_DEALS_PER_SOURCE=5
-POST_INTERVAL_MINUTES=6
-REQUEST_TIMEOUT=30
-RATE_LIMIT_DELAY=2
-DEFAULT_REGION=US
-
-# Web Dashboard
-FLASK_HOST=0.0.0.0
-FLASK_PORT=5000
-FLASK_SECRET_KEY=your-secret-key-change-in-production
-
-# Admin Users (comma-separated Telegram user IDs)
-ADMIN_USER_IDS=123456789,987654321
-```
-
-**⚠️ Security Note**: Never commit your `.env` file to version control!
-
----
-
-## 🎯 Usage
-
-### Running the Bot
-
-#### Full Mode (Bot + Web Dashboard)
-```bash
-python main.py
-```
-
-#### Bot Only
-```bash
-python main.py bot
-```
-
-#### Web Dashboard Only
 ```bash
 python main.py web
 ```
 
-#### Post Deals Manually
-```bash
-python main.py post
-```
-
-### Telegram Bot Commands
-
-#### User Commands
-- `/start` - Welcome message and setup
-- `/help` - Show all available commands
-- `/deals` - Get latest deals (all categories)
-- `/search <keyword>` - Search products by keyword
-  - Example: `/search wireless headphones`
-- `/category` - Set preferred product categories
-- `/region` - Set your Amazon region
-- `/stats` - View your statistics
-
-#### Category Commands
-- `/electronics` - Electronics deals
-- `/home` - Home & Kitchen deals
-- `/fashion` - Fashion deals
-- `/sports` - Sports & Outdoors deals
-- `/beauty` - Beauty deals
-- `/books` - Books deals
-
-#### Admin Commands
-- `/admin` - Admin panel
-- `/add_deal <url>` - Manually add a deal
-- `/broadcast <message>` - Broadcast message to all users
-
-### Web Dashboard
-
-Access the dashboard at: `http://localhost:5000`
-
-**Features:**
-- Real-time deal statistics
-- User analytics
-- Deal management
-- Configuration overview
-- Health monitoring
-
----
-
-## 📁 Project Structure
-
-```
-AmazonAffiliatedBot/
-├── config.py                 # Configuration management
-├── scraper.py                # Amazon deal scraper & product search
-├── telegram_bot.py           # Telegram bot implementation
-├── main.py                   # Main application entry point
-├── web_dashboard_clean.py    # Flask web dashboard
-├── link_validator.py         # Affiliate link validation
-├── content_generator.py      # AI content generation
-├── scheduler.py              # Task scheduling
-├── database.py               # PostgreSQL database manager
-├── database_simple.py        # In-memory database (fallback)
-├── models.py                 # Data models
-├── static/                   # Web dashboard static files
-│   ├── css/
-│   └── js/
-├── templates/               # Web dashboard templates
-│   ├── base.html
-│   ├── dashboard.html
-│   ├── deals.html
-│   └── users.html
-├── requirements.txt         # Python dependencies
-├── example.env              # Environment variables template
-└── README.md                # This file
-```
-
----
-
-## 🔧 Key Features Explained
-
-### 1. Deal Scraping
-
-The bot automatically scrapes deals from multiple Amazon sources:
-- Today's Deals
-- Lightning Deals
-- Best Deals
-- Goldbox
-
-**Quality Filtering:**
-- Minimum 20% discount
-- Minimum 4.0 star rating
-- Minimum 50 reviews
-- Deal freshness scoring
-
-### 2. Keyword Search
-
-Search Amazon products by keyword:
-```python
-products = await scraper.search_products_by_keyword(
-    keyword="wireless headphones",
-    max_results=20,
-    affiliate_id="one4allmarket-21"
-)
-```
-
-**Features:**
-- Automatic affiliate tag appending
-- Quality filtering (rating, reviews)
-- Image extraction
-- Complete product information
-
-### 3. Image Extraction
-
-Products automatically include images:
-- Extracted from Amazon product pages
-- Full resolution URLs
-- Fallback handling for missing images
-- Displayed in Telegram messages
-
-### 4. Affiliate Tag Verification
-
-Ensures affiliate tags are correctly appended:
-- Validates tag presence in URLs
-- Verifies tags after redirects
-- Logs warnings for missing tags
-- Prevents revenue loss
-
-### 5. Deal of the Day
-
-Dedicated method for featured deals:
-```python
-deal = await scraper.get_deal_of_the_day(
-    affiliate_id="one4allmarket-21"
-)
-```
-
----
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**1. Bot not responding**
-- Check `TELEGRAM_BOT_TOKEN` in `.env`
-- Verify bot is running: `python main.py bot`
-- Check logs: `tail -f dealbot.log`
-
-**2. No deals found**
-- Amazon may be rate limiting - increase `RATE_LIMIT_DELAY`
-- Check internet connection
-- Verify Amazon pages are accessible
-
-**3. Affiliate links not working**
-- Verify `AMAZON_AFFILIATE_ID` is correct
-- Check affiliate account status
-- Review link validation logs
-
-**4. Database connection errors**
-- Verify PostgreSQL is running
-- Check `DATABASE_URL` format
-- Ensure database exists
-
-**5. Images not displaying**
-- Check image URLs in logs
-- Verify Amazon image CDN access
-- Some images may expire (Amazon CDN limitation)
-
----
-
-## 📊 Performance
-
-### Optimization Tips
-
-1. **Rate Limiting**: Adjust `RATE_LIMIT_DELAY` to balance speed vs. rate limits
-2. **Database**: Use PostgreSQL for production (faster than in-memory)
-3. **Caching**: Consider caching deal results to reduce API calls
-4. **Concurrent Requests**: Adjust `max_concurrent` in link validation
-
-### Expected Performance
-
-- **Deal Scraping**: 2-5 seconds per source
-- **Keyword Search**: 3-8 seconds per search
-- **Link Validation**: 1-3 seconds per link
-- **Image Extraction**: <100ms per product
-
----
-
-## 🔒 Security
-
-### Best Practices
-
-1. **Environment Variables**: Never commit `.env` file
-2. **API Keys**: Rotate keys regularly
-3. **Database**: Use strong passwords and SSL connections
-4. **Input Validation**: All user inputs are sanitized
-5. **Rate Limiting**: Prevents abuse and Amazon blocks
-
-### Security Features
-
-- Input sanitization in web dashboard
-- URL validation before processing
-- Affiliate tag format validation
-- SQL injection protection (parameterized queries)
-- XSS protection in web interface
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Code Style
-
-- Follow PEP 8 guidelines
-- Use type hints where possible
-- Add docstrings to functions
-- Write tests for new features
-
----
-
-## 📝 License
-
-MIT License
-
-Copyright (c) 2025 RafalW3bCraft
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
----
-
-## 🙏 Acknowledgments
-
-- Amazon Associates Program
-- Telegram Bot API
-- OpenAI API
-- BeautifulSoup for web scraping
-- All contributors and users
-
----
-
-## 📞 Support
-
-For issues, questions, or contributions:
-- Check the logs: `dealbot.log`
-- Review the code documentation
-- Open an issue on GitHub
-- Contact the maintainer
-
----
-
-## 🎯 Roadmap
-
-### Planned Features
-- [ ] Amazon Product Advertising API (PA-API) integration
-- [ ] Image caching and CDN support
-- [ ] Advanced analytics dashboard
-- [ ] Multi-language support
-- [ ] Automated A/B testing for content
-- [ ] Mobile app integration
-- [ ] Webhook support for real-time updates
-
-### Recent Updates
-- ✅ Image extraction implementation
-- ✅ Keyword search functionality
-- ✅ Affiliate tag verification
-- ✅ Deal of the Day integration
-- ✅ Enhanced error handling
-- ✅ Improved rate limiting
-
----
-
-## 📈 Statistics
-
-The dashboard reports metrics derived from the local deals database only (`/api/stats`):
-- Total deals posted
-- Total tracked link clicks (redirect clicks through this app — not verified affiliate conversions or revenue)
-- Active users
-- Category breakdown
-
-These numbers do **not** include actual Amazon Associates earnings; check your Amazon Associates dashboard for verified revenue.
-
-Access via:
-- Telegram: `/stats`
-- Web Dashboard: `/api/stats`
-
----
-
-## 🧭 DealPilot AI Commerce (2026 hackathon upgrade)
-
-DealPilot turns the bot into a two-lane AI commerce demo:
-
-### Two commerce lanes
-
-1. **MERCHANT_CHECKOUT** (default, `ENABLE_MERCHANT_CHECKOUT=true`): in-app cart and checkout via **PayPal sandbox Orders v2** — never live PayPal (`PAYPAL_ENVIRONMENT=sandbox` is enforced).
-2. **EXTERNAL_AFFILIATE** (`ENABLE_EXTERNAL_AFFILIATE=false` by default): Amazon referral links with affiliate-tag validation. Disabled by default so the demo runs fully self-contained.
-
-### Features
-
-- PayPal sandbox order creation, capture, and webhook verification
-- Cart guardrails: `MAX_CART_TOTAL` cap and quote TTL (`CART_QUOTE_TTL_MINUTES`)
-- Separate commerce database (`COMMERCE_DATABASE_URL`, defaults to `sqlite:///commerce.db`) — payment records never touch the in-memory deals fallback
-- Shop UI at `/shop` with demo-mode catalog browsing (no secrets required)
-- AI shopping assistant via OpenAI or Featherless (`AI_MODEL`), with a deterministic, clearly non-AI fallback when no key is configured
-
-### Quickstart
+Open `http://127.0.0.1:5000/shop`. To run diagnostics:
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp example.env .env        # fill in values, or leave placeholders for demo
-DEMO_MODE=true python main.py web
-# open http://localhost:5000/shop
+python scripts/config_check.py
+python scripts/ai_smoke.py
 ```
 
-### Docs
+`ai_smoke.py` requires valid provider access and exits nonzero when the result falls back. Never commit `.env`; provide secrets through an approved secret manager in hosted environments.
 
-- [docs/JUDGE_RUNBOOK.md](docs/JUDGE_RUNBOOK.md) — step-by-step judge demo flow
-- [docs/EVIDENCE.md](docs/EVIDENCE.md) — verification evidence and test output
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — lane design and data flow
+## Environment and profiles
 
----
+Required configuration is documented in [.env.example](.env.example). For a real sandbox flow, set `DEMO_MODE=false`, a strong `FLASK_SECRET_KEY`, `PAYPAL_ENVIRONMENT=sandbox`, `ENABLE_MERCHANT_CHECKOUT=true`, durable `COMMERCE_DATABASE_URL`, PayPal sandbox client ID and secret, webhook ID, and the intended AI provider plus key/model. Keep `ENABLE_EXTERNAL_AFFILIATE=false` unless an affiliate tag and compliant referral flow are intentionally configured. `scripts/config_check.py --online` performs a read-only PayPal OAuth probe; it does not create an order or capture a payment.
 
-**Made with ❤️ for Amazon Affiliate Marketers**
+Commerce schema initialization is managed by `CommerceStorage`; the PostgreSQL schema reference is [migrations/001_commerce.sql](migrations/001_commerce.sql). Use PostgreSQL for shared/deployed payment data. Local SQLite is for development only. Payment records must not use in-memory storage.
 
-*Last Updated: 2025*
+## Sandbox setup and webhook configuration
+
+1. Create a PayPal developer sandbox REST app and sandbox buyer account.
+2. Put the sandbox client ID/secret in local environment variables, never in source control.
+3. Set `COMMERCE_DATABASE_URL` to a durable database and `FLASK_SECRET_KEY` to a strong random value.
+4. Configure the webhook endpoint exposed by the app and copy its sandbox webhook ID to `PAYPAL_WEBHOOK_ID`.
+5. Subscribe to the order-approved, approval-reversed, and capture pending/completed/denied events.
+6. Run `python scripts/config_check.py --online` and verify the report without sharing credentials.
+7. Complete the real buyer approval in the sandbox UI, then inspect the persisted receipt and merchant dashboard. Do not claim a capture until the returned capture ID and status are independently verified.
+
+The recurring execution of `scripts/retry_paypal_webhooks.py` is not configured in a deployment yet. See [the webhook evidence](docs/release/WEBHOOK_EVIDENCE.md).
+
+## Tests and checks
+
+Use the isolated development dependencies:
+
+```bash
+python -m compileall -q .
+python -m pip check
+python -m pytest -q
+python -m pytest --cov=ai --cov=commerce --cov=paypal_checkout --cov=web --cov-report=term-missing
+python -m ruff check .
+python -m pip_audit -r requirements.lock
+```
+
+The latest clean local run collected 146 tests: 146 passed, 0 failed, 0 skipped; targeted coverage was 76%. `ruff check .` now runs the explicit correctness rule set in `pyproject.toml`; a broader pre-profile scan found 336 legacy style/modernization findings and is not represented as clean. The dependency audit found no known vulnerabilities in the pinned lockfile. Full details and caveats are in [TEST_REPORT.md](docs/release/TEST_REPORT.md). GitHub Actions has not yet run on the submission candidate.
+
+## Security and limitations
+
+- Live PayPal is unsupported; all payment tests and credentials must remain sandbox-only.
+- Catalog values and totals are server-authoritative; AI output cannot change them or place an order.
+- Checkout requires buyer ownership, quote validity, CSRF/session controls, and durable storage.
+- Merchant authorization uses bearer headers, not query-string tokens.
+- Demo mode uses an insecure demo-only session secret and is not suitable for public hosting.
+- No real AI inference, buyer-approved capture, signed webhook delivery, browser E2E, hosted deployment, or public video is verified as of this report.
+- Production readiness is separate and not established. Merchant onboarding, refunds, disputes, fraud controls, privacy obligations, operational monitoring, backup/restore, and real-payment compliance remain out of scope.
+
+## Judge walkthrough
+
+A reproducible local catalog preview is available with the install steps above. To demonstrate AI and PayPal, provision fresh provider and PayPal sandbox credentials, complete the live steps in [DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md), and save sanitized evidence. No hosted judge URL is currently published. The Devpost draft is [docs/DEVPOST_SUBMISSION.md](docs/DEVPOST_SUBMISSION.md); it must not be presented as a verified submission until its blockers are resolved.
+
+## Project history and license
+
+See [HACKATHON_CHANGELOG.md](HACKATHON_CHANGELOG.md) for verified repository history and current worktree changes. The project is distributed under the root [LICENSE](LICENSE).

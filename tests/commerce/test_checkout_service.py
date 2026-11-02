@@ -197,7 +197,22 @@ def test_repeated_start_checkout_idempotent(env):
     first = env.checkout.start_checkout("actor-1", quote.quote_id, BUYER)
     second = env.checkout.start_checkout("actor-1", quote.quote_id, BUYER)
     assert first["attempt_id"] == second["attempt_id"]
+    assert second["approve_url"] == first["approve_url"]
     assert len(env.gateway.create_calls) == 1  # create_order called once
+
+
+def test_start_checkout_replay_recovers_approve_url_for_existing_attempt(env):
+    quote = make_quote(env)
+    first = env.checkout.start_checkout("actor-1", quote.quote_id, BUYER)
+    assert "approve" in first["approve_url"]
+
+    env.gateway.orders[first["paypal_order_id"]]["links"] = [
+        {"rel": "approve", "href": "https://www.sandbox.paypal.com/checkoutnow?token=abc"}
+    ]
+    replay = env.checkout.start_checkout("actor-1", quote.quote_id, BUYER)
+    assert replay["attempt_id"] == first["attempt_id"]
+    assert replay["approve_url"] == "https://www.sandbox.paypal.com/checkoutnow?token=abc"
+    assert len(env.gateway.create_calls) == 1
 
 
 def test_start_checkout_rejects_quote_from_another_actor(env):
