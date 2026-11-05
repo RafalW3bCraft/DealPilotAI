@@ -5,7 +5,7 @@ Auditor: Hermes (automated + manual inspection)
 
 ## Repository state
 
-- Remote: https://github.com/RafalW3bCraft/AmazonAffiliatedBot
+- Remote: https://github.com/RafalW3bCraft/DealPilotAI
 - Pre-hackathon baseline commit (main): `c3d30781baed4e7ae4375de7fde67295eff84d30` — "Merge pull request #9" (recorded in master prompt as 2026-04-05)
 - Working branch for all new work: `feature/paypal-ai-dealpilot-2026`
 - Git status at audit start: clean except untracked `DealPilot_AI_PayPal_Hackathon_Hermes_Master_Prompt.md` (the build prompt; committed to feature branch as record of requirements)

@@ -6,6 +6,7 @@ This test is not evidence of a live PayPal transaction or genuine AI inference.
 from __future__ import annotations
 
 import copy
+import json
 import threading
 
 from flask import abort, redirect, request, url_for
@@ -24,7 +25,12 @@ class FakePayPalGateway:
             "id": "MOCK-ORDER-E2E",
             "status": "CREATED",
             "purchase_units": copy.deepcopy(purchase_units or []),
-            "links": [{"rel": "approve", "href": self.approve_url}],
+            "links": [
+                {
+                    "rel": "approve",
+                    "href": f"{self.approve_url}?token=MOCK-ORDER-E2E",
+                }
+            ],
         }
         return copy.deepcopy(self.order)
 
@@ -121,11 +127,13 @@ def test_browser_mocked_checkout_desktop_and_mobile(monkeypatch, tmp_path):
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
             context = browser.new_context(
+                viewport={"width": 1440, "height": 1000},
                 extra_http_headers={
                     "Authorization": "Bearer browser-test-dashboard-token"
                 }
             )
-            page = context.new_page(viewport={"width": 1440, "height": 1000})
+            context.set_extra_http_headers({})
+            page = context.new_page()
             page.goto(f"{base_url}/shop", wait_until="networkidle")
             assert page.locator("#dp-ai-form").is_visible()
 
@@ -136,9 +144,43 @@ def test_browser_mocked_checkout_desktop_and_mobile(monkeypatch, tmp_path):
                 "#dp-ai-results"
             ).inner_text()
 
+            malicious_text = '<img src=x onerror="window.__dealpilotInjected=true">'
+            page.route(
+                "**/api/ai/recommend",
+                lambda route: route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body=json.dumps({
+                        "items": [{
+                            "sku": "DP-LAMP-001",
+                            "price": "24.99",
+                            "currency": "USD",
+                            "reason": malicious_text,
+                        }],
+                        "provider": "test-provider",
+                        "fallback": False,
+                        "tradeoffs": malicious_text,
+                        "missing_info": [],
+                    }),
+                ),
+            )
+            page.locator("#dp-ai-query").fill("show an unsafe catalog description")
+            page.locator("#dp-ai-form button[type=submit]").click()
+            page.locator("#dp-ai-results .dp-ai-card").first.wait_for()
+            assert malicious_text in page.locator("#dp-ai-results").inner_text()
+            assert page.locator("#dp-ai-results img").count() == 0
+            assert page.evaluate("window.__dealpilotInjected || false") is False
+            page.unroute("**/api/ai/recommend")
+
             page.locator(
                 'input[name="sel"][data-sku="DP-LAMP-001"]'
             ).check()
+            page.locator('input[name="qty_DP-LAMP-001"]').fill("2.5")
+            page.locator("#dp-quote-form button[type=submit]").click()
+            assert page.locator('input[name="qty_DP-LAMP-001"]').evaluate(
+                "(input) => input.checkValidity()"
+            ) is False
+            assert "/shop" in page.url
             page.locator('input[name="qty_DP-LAMP-001"]').fill("2")
             page.locator("#dp-quote-form button[type=submit]").click()
             page.wait_for_url("**/cart?quote_id=*")
@@ -151,9 +193,15 @@ def test_browser_mocked_checkout_desktop_and_mobile(monkeypatch, tmp_path):
             assert "49.98 USD" in page.locator("main").inner_text()
 
             page.goto(f"{base_url}/merchant", wait_until="networkidle")
+            assert page.url.endswith("/merchant/login")
+            page.locator("#merchant-token").fill("browser-test-dashboard-token")
+            page.locator("form button[type=submit]").click()
+            page.wait_for_url("**/merchant")
             merchant_text = page.locator("main").inner_text()
             assert "Merchant dashboard" in merchant_text
             assert "MOCK-CAPTURE-E2E" in merchant_text
+            page.locator('form[action="/merchant/logout"] button').click()
+            page.wait_for_url("**/merchant/login")
 
             page.set_viewport_size({"width": 390, "height": 844})
             page.goto(f"{base_url}/shop", wait_until="networkidle")

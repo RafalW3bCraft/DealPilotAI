@@ -1,61 +1,55 @@
-{% extends "base.html" %}
-{% block title %}Merchant dashboard{% endblock %}
-{% block head %}
-<link href="{{ url_for('static', filename='css/dealpilot.css') }}" rel="stylesheet">
-{% endblock %}
+{% extends "commerce_base.html" %}
+{% block title %}Merchant dashboard · DealPilot{% endblock %}
 {% block content %}
-<main class="dp-wrap">
-  <h1 class="dp-title">Merchant dashboard</h1>
+<main class="dp-page dp-merchant-page" id="main-content">
+  <div class="dp-page-heading dp-merchant-heading">
+    <div><p class="dp-eyebrow">MERCHANT PORTAL</p><h1>Merchant dashboard</h1><p class="dp-muted">A clear view of your catalog activity and sandbox orders.</p></div>
+    {% if not demo_mode %}
+    <form method="post" action="{{ url_for('commerce.merchant_logout') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="dp-btn dp-btn-secondary" type="submit">Sign out</button>
+    </form>
+    {% endif %}
+  </div>
   {% if demo_mode %}
-  <p class="dp-demo-banner" role="note">DEMO MODE - merchant dashboard is open without a token.</p>
+  <p class="dp-alert dp-alert-warn" role="note">Demo mode · This dashboard is open for local preview and is not protected for public hosting.</p>
   {% endif %}
-  <p class="dp-sandbox">{{ sandbox_note }}</p>
-  <p class="dp-fulfillment">{{ fulfillment }}</p>
+  <p class="dp-safe-note">{{ sandbox_note }} {{ fulfillment }}</p>
 
-  <section aria-label="Funnel stats">
-    <h2>Funnel</h2>
-    <p>Paid sandbox GMV: <strong>{{ gmv }} {{ stats.currency or 'USD' }}</strong></p>
-    <p>Abandoned carts: <strong>{{ stats.abandoned_carts or 0 }}</strong></p>
-    <table class="dp-table">
-      <thead><tr><th>Status</th><th>Count</th></tr></thead>
-      <tbody>
-        {% for status, count in by_status_items %}
-        <tr><td>{{ status }}</td><td>{{ count }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <section class="dp-metric-grid" aria-label="Store overview">
+    <article class="dp-metric-card"><span>Verified sandbox volume</span><strong>{{ gmv }} {{ stats.currency or 'USD' }}</strong><small>Completed captures only</small></article>
+    <article class="dp-metric-card"><span>Abandoned checkouts</span><strong>{{ stats.abandoned_carts or 0 }}</strong><small>Orders awaiting completion</small></article>
+    <article class="dp-metric-card"><span>Tracked order states</span><strong>{{ by_status_items|length }}</strong><small>Across the current order ledger</small></article>
   </section>
 
-  <section aria-label="Orders">
-    <h2>Orders</h2>
-    <table class="dp-table">
-      <thead>
-        <tr><th>Order</th><th>Status</th><th>Amount</th><th>Capture</th><th>Created</th></tr>
-      </thead>
-      <tbody>
-        {% for o in orders %}
-        <tr>
-          <td>{{ o.masked_id }}</td>
-          <td>{{ o.status_label }}</td>
-          <td>{{ o.amount }} {{ o.currency }}</td>
-          <td>{{ o.capture_id }}</td>
-          <td>{{ o.created_at }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <section class="dp-panel dp-dashboard-panel" aria-labelledby="order-states-title">
+    <div class="dp-panel-heading"><div><p class="dp-eyebrow">COMMERCE HEALTH</p><h2 id="order-states-title">Order states</h2></div></div>
+    <div class="dp-table-scroll"><table class="dp-table">
+      <caption class="dp-visually-hidden">Checkout attempts by state</caption>
+      <thead><tr><th scope="col">Status</th><th scope="col">Count</th></tr></thead>
+      <tbody>{% for status, count in by_status_items %}<tr><td>{{ status.replace('_', ' ')|title }}</td><td>{{ count }}</td></tr>{% else %}<tr><td colspan="2">No checkout activity yet.</td></tr>{% endfor %}</tbody>
+    </table></div>
   </section>
 
-  <section aria-label="Agent sessions">
-    <h2>Recent assistant sessions (redacted)</h2>
-    <table class="dp-table">
-      <thead><tr><th>Actor</th><th>Model</th><th>Input hash</th><th>Time</th></tr></thead>
-      <tbody>
-        {% for s in sessions %}
-        <tr><td>{{ s.actor_id }}</td><td>{{ s.model }}</td><td>{{ s.input_hash }}</td><td>{{ s.created_at }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <section class="dp-panel dp-dashboard-panel" aria-labelledby="orders-title">
+    <div class="dp-panel-heading"><div><p class="dp-eyebrow">RECENT ACTIVITY</p><h2 id="orders-title">Orders</h2></div><span class="dp-catalog-count">Latest 100</span></div>
+    <div class="dp-table-scroll"><table class="dp-table">
+      <caption class="dp-visually-hidden">Recent sandbox orders</caption>
+      <thead><tr><th scope="col">Order</th><th scope="col">Status</th><th scope="col">Amount</th><th scope="col">Capture</th><th scope="col">Created</th></tr></thead>
+      <tbody>{% for o in orders %}
+        <tr><td>{{ o.masked_id }}</td><td><span class="dp-badge">{{ o.status_label }}</span></td><td>{{ o.amount }} {{ o.currency }}</td><td>{{ o.capture_id or '—' }}</td><td>{{ o.created_at }}</td></tr>
+      {% else %}<tr><td colspan="5">No orders yet. Completed sandbox captures will appear here.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+
+  <section class="dp-panel dp-dashboard-panel" aria-labelledby="sessions-title">
+    <div class="dp-panel-heading"><div><p class="dp-eyebrow">PRIVACY-MINIMIZED</p><h2 id="sessions-title">Assistant activity</h2></div></div>
+    <p class="dp-muted">Queries are represented by a one-way hash; raw shopper text is not shown.</p>
+    <div class="dp-table-scroll"><table class="dp-table">
+      <caption class="dp-visually-hidden">Recent redacted assistant sessions</caption>
+      <thead><tr><th scope="col">Actor</th><th scope="col">Provider</th><th scope="col">Input hash</th><th scope="col">Time</th></tr></thead>
+      <tbody>{% for s in sessions %}<tr><td>{{ s.actor_id }}</td><td>{{ s.model }}</td><td>{{ s.input_hash }}</td><td>{{ s.created_at }}</td></tr>{% else %}<tr><td colspan="4">No assistant activity yet.</td></tr>{% endfor %}</tbody>
+    </table></div>
   </section>
 </main>
 {% endblock %}

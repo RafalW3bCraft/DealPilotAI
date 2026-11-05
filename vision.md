@@ -1,4 +1,6 @@
-# Amazon Affiliate Bot — Engineering Vision, Debug Report, and Completion Plan
+# DealPilotAI — Engineering Vision, Debug Report, and Completion Plan
+
+Historical planning document; use the current [README](README.md) and [release evidence](docs/release/RELEASE_GATE_MATRIX.md) for verified setup and readiness status.
 
 ## 1) Purpose
 
@@ -361,7 +363,7 @@ This section captures the requested STAGE-based execution memory format:
 | T-25 | 7 | Regression script for known bugs | ⏳ Pending |
 
 # vision.md
-# Amazon Affiliate Bot — Advanced Implementation & AI Agent Task Memory
+# DealPilotAI — Advanced Implementation & AI Agent Task Memory
 # Auto-generated from vision.md analysis | Version: 1.0 | April 2026
 # 
 # PURPOSE: This file is the authoritative task memory for AI agents and AI assistants.

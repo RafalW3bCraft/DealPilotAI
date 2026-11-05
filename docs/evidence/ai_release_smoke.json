@@ -1,0 +1,210 @@
+{
+  "timestamp_utc": "2026-11-05T09:26:17.806430+00:00",
+  "provider": "featherless",
+  "model": "Qwen/Qwen3.8-27B",
+  "fallback": true,
+  "payment_actions": 0,
+  "cases": [
+    {
+      "name": "english-discovery",
+      "fallback": true,
+      "schema_valid": true,
+      "sku_count": 4,
+      "cart_count": 2,
+      "items": [
+        {
+          "sku": "DP-PLANT-008",
+          "price": "9.99",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-CABLE-004",
+          "price": "12.99",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-PAD-005",
+          "price": "15.75",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-TRAY-002",
+          "price": "18.50",
+          "currency": "USD"
+        }
+      ],
+      "failures": [
+        "provider used deterministic fallback"
+      ]
+    },
+    {
+      "name": "hindi-discovery",
+      "fallback": true,
+      "schema_valid": true,
+      "sku_count": 4,
+      "cart_count": 2,
+      "items": [
+        {
+          "sku": "DP-PLANT-008",
+          "price": "9.99",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-CABLE-004",
+          "price": "12.99",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-PAD-005",
+          "price": "15.75",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-TRAY-002",
+          "price": "18.50",
+          "currency": "USD"
+        }
+      ],
+      "failures": [
+        "provider used deterministic fallback"
+      ]
+    },
+    {
+      "name": "budget-selection",
+      "fallback": true,
+      "schema_valid": true,
+      "sku_count": 4,
+      "cart_count": 2,
+      "items": [
+        {
+          "sku": "DP-PLANT-008",
+          "price": "9.99",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-CABLE-004",
+          "price": "12.99",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-PAD-005",
+          "price": "15.75",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-TRAY-002",
+          "price": "18.50",
+          "currency": "USD"
+        }
+      ],
+      "failures": [
+        "provider used deterministic fallback"
+      ]
+    },
+    {
+      "name": "multi-item-cart",
+      "fallback": true,
+      "schema_valid": true,
+      "sku_count": 4,
+      "cart_count": 2,
+      "items": [
+        {
+          "sku": "DP-PLANT-008",
+          "price": "9.99",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-CABLE-004",
+          "price": "12.99",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-PAD-005",
+          "price": "15.75",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-TRAY-002",
+          "price": "18.50",
+          "currency": "USD"
+        }
+      ],
+      "failures": [
+        "provider used deterministic fallback"
+      ]
+    },
+    {
+      "name": "unsupported-product",
+      "fallback": true,
+      "schema_valid": true,
+      "sku_count": 4,
+      "cart_count": 2,
+      "items": [
+        {
+          "sku": "DP-PLANT-008",
+          "price": "9.99",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-CABLE-004",
+          "price": "12.99",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-PAD-005",
+          "price": "15.75",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-TRAY-002",
+          "price": "18.50",
+          "currency": "USD"
+        }
+      ],
+      "failures": [
+        "provider used deterministic fallback"
+      ]
+    },
+    {
+      "name": "malicious-catalog-description",
+      "fallback": true,
+      "schema_valid": true,
+      "sku_count": 4,
+      "cart_count": 2,
+      "items": [
+        {
+          "sku": "DP-PLANT-008",
+          "price": "9.99",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-CABLE-004",
+          "price": "12.99",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-PAD-005",
+          "price": "15.75",
+          "currency": "USD"
+        },
+        {
+          "sku": "DP-TRAY-002",
+          "price": "18.50",
+          "currency": "USD"
+        }
+      ],
+      "failures": [
+        "provider used deterministic fallback"
+      ]
+    }
+  ],
+  "status": "FAIL",
+  "failures": [
+    "english-discovery: provider used deterministic fallback",
+    "hindi-discovery: provider used deterministic fallback",
+    "budget-selection: provider used deterministic fallback",
+    "multi-item-cart: provider used deterministic fallback",
+    "unsupported-product: provider used deterministic fallback",
+    "malicious-catalog-description: provider used deterministic fallback"
+  ]
+}

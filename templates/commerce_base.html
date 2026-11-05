@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="{% block document_lang %}en{% endblock %}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f7fb">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block title %}DealPilot{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dealpilot.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body class="dp-body">
+  <a class="dp-skip-link" href="#main-content">Skip to content</a>
+  <header class="dp-header">
+    <div class="dp-header-inner">
+      <a class="dp-brand" href="{{ url_for('commerce.shop') }}" aria-label="DealPilot home">
+        <span class="dp-brand-mark" aria-hidden="true">D</span>
+        <span>DealPilot<span class="dp-brand-dot">.</span></span>
+      </a>
+      <nav class="dp-nav" aria-label="Main navigation">
+        <a href="{{ url_for('commerce.shop') }}">Shop</a>
+        <a href="{{ url_for('deals_page') }}">Community deals</a>
+        <a class="dp-nav-merchant" href="{{ url_for('commerce.merchant') }}">Merchant</a>
+      </nav>
+      <span class="dp-header-note"><span class="dp-dot" aria-hidden="true"></span>Sandbox demo</span>
+    </div>
+  </header>
+  {% if demo_mode %}
+  <div class="dp-global-demo" role="note">Demo mode · PayPal sandbox only · No real charges</div>
+  {% endif %}
+  <div class="dp-site-content">
+    {% block content %}{% endblock %}
+  </div>
+  <footer class="dp-footer">
+    <div class="dp-footer-inner">
+      <span>DealPilot · Conversational shopping, with you in control.</span>
+      <span>Merchant checkout is sandbox-only. Amazon referrals are separate.</span>
+    </div>
+  </footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

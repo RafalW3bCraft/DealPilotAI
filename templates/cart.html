@@ -1,52 +1,56 @@
-{% extends "base.html" %}
-{% block title %}Cart{% endblock %}
-{% block head %}
-<link href="{{ url_for('static', filename='css/dealpilot.css') }}" rel="stylesheet">
-{% endblock %}
+{% extends "commerce_base.html" %}
+{% block title %}Your cart · DealPilot{% endblock %}
 {% block content %}
-<main class="dp-wrap">
-  <h1 class="dp-title">Cart review</h1>
-  {% if message %}<p class="dp-notice" role="status">{{ message }}</p>{% endif %}
-  {% if error %}<p class="dp-error" role="alert">{{ error }}</p>{% endif %}
+<main class="dp-page" id="main-content">
+  <nav class="dp-breadcrumbs" aria-label="Breadcrumb"><a href="{{ url_for('commerce.shop') }}">Shop</a><span aria-hidden="true">/</span><span aria-current="page">Your cart</span></nav>
+  <div class="dp-page-heading"><div><p class="dp-eyebrow">ALMOST THERE</p><h1>Your cart</h1><p class="dp-muted">Review your items and server-verified prices before checkout.</p></div></div>
+  {% if message %}<p class="dp-alert dp-alert-info" role="status">{{ message }}</p>{% endif %}
+  {% if error %}<p class="dp-alert dp-alert-error" role="alert">{{ error }}</p>{% endif %}
 
   {% if quote %}
-  <p class="dp-merchant">Merchant: <strong>{{ quote.merchant_name }}</strong></p>
-  <table class="dp-table">
-    <thead>
-      <tr><th>SKU</th><th>Item</th><th>{{ labels.quantity }}</th><th>{{ labels.price }}</th><th>Line total</th></tr>
-    </thead>
-    <tbody>
-      {% for it in quote['items'] %}
-      <tr>
-        <td>{{ it.sku }}</td>
-        <td>{{ it.title }}</td>
-        <td>{{ it.quantity }}</td>
-        <td>{{ it.unit_price }} {{ quote.currency }}</td>
-        <td>{{ it.line_total }} {{ quote.currency }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-    <tfoot>
-      <tr><td colspan="4">{{ labels.total }}</td><td><strong>{{ quote.total }} {{ quote.currency }}</strong></td></tr>
-    </tfoot>
-  </table>
+  <div class="dp-cart-layout">
+    <section class="dp-panel dp-cart-items" aria-labelledby="cart-items-title">
+      <div class="dp-panel-heading"><h2 id="cart-items-title">Items from {{ quote.merchant_name }}</h2><a href="{{ url_for('commerce.shop') }}">Continue shopping</a></div>
+      <div class="dp-table-scroll">
+        <table class="dp-table">
+          <caption class="dp-visually-hidden">Items in your shopping cart</caption>
+          <thead><tr><th scope="col">Product</th><th scope="col">{{ labels.quantity }}</th><th scope="col">{{ labels.price }}</th><th scope="col">Line total</th></tr></thead>
+          <tbody>
+            {% for it in quote['items'] %}
+            <tr>
+              <td><span class="dp-cart-item-title">{{ it.title }}</span><span class="dp-cart-item-sku">{{ it.sku }}</span></td>
+              <td>{{ it.quantity }}</td>
+              <td>{{ it.unit_price }} {{ quote.currency }}</td>
+              <td><strong>{{ it.line_total }} {{ quote.currency }}</strong></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-  <p class="dp-expiry" id="dp-expiry" data-expires="{{ quote.expires_at_ts }}">
-    Quote expires: {{ quote.expires_at }} <span id="dp-countdown"></span>
-  </p>
-  <p class="dp-fulfillment">{{ fulfillment }}</p>
-
-  {% if quote.expired %}
-    <button class="dp-btn dp-btn-primary" disabled
-            title="This quote has expired - request a new one">{{ labels.checkout }}</button>
-    <p class="dp-error">Quote expired. Go back to the shop to create a fresh quote.</p>
+    <aside class="dp-panel dp-order-summary" aria-labelledby="summary-title">
+      <h2 id="summary-title">Order summary</h2>
+      <p class="dp-summary-merchant"><span>Sold by</span><strong>{{ quote.merchant_name }}</strong></p>
+      <p class="dp-summary-total"><span>{{ labels.total }}</span><strong>{{ quote.total }} {{ quote.currency }}</strong></p>
+      <p class="dp-expiry" id="dp-expiry" data-expires="{{ quote.expires_at_ts }}">
+        Quote expires <strong>{{ quote.expires_at }}</strong><span id="dp-countdown"></span>
+      </p>
+      <p class="dp-fulfillment">{{ fulfillment }}</p>
+      {% if quote.expired %}
+        <button class="dp-btn dp-btn-primary dp-btn-block" disabled
+                title="This quote has expired - request a new one">{{ labels.checkout }}</button>
+        <p class="dp-alert dp-alert-error" role="alert">This quote expired. Return to the shop to request a fresh total.</p>
+      {% else %}
+        <button id="dp-checkout-btn" class="dp-btn dp-btn-primary dp-btn-block"
+                data-quote-id="{{ quote.quote_id }}">{{ labels.checkout }} <span aria-hidden="true">→</span></button>
+        <p id="dp-checkout-msg" class="dp-form-message" aria-live="polite" role="status"></p>
+      {% endif %}
+      <p class="dp-safe-note"><span aria-hidden="true">✓</span> You will review and approve payment on PayPal Sandbox.</p>
+    </aside>
+  </div>
   {% else %}
-    <button id="dp-checkout-btn" class="dp-btn dp-btn-primary"
-            data-quote-id="{{ quote.quote_id }}">{{ labels.checkout }}</button>
-    <div id="dp-checkout-msg" class="dp-notice" aria-live="polite"></div>
-  {% endif %}
-  {% else %}
-    <p>Your cart is empty. <a href="{{ url_for('commerce.shop') }}">Browse the shop</a>.</p>
+    <section class="dp-empty-state"><span class="dp-empty-icon" aria-hidden="true">＋</span><h2>Your cart is waiting</h2><p>Add something from the catalog to get started.</p><a class="dp-btn dp-btn-primary" href="{{ url_for('commerce.shop') }}">Browse the store</a></section>
   {% endif %}
 </main>
 {% endblock %}

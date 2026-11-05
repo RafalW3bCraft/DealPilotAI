@@ -175,6 +175,7 @@ def create_app(config: Config):
     # Config validates FLASK_SECRET_KEY at construction (fail-closed); no insecure
     # fallback is permitted here.
     app.config['SECRET_KEY'] = config.FLASK_SECRET_KEY
+    app.config['PREFERRED_URL_SCHEME'] = config.PREFERRED_URL_SCHEME
 
     # Session cookie hardening (DealPilot web layer).
     try:

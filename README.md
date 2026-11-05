@@ -2,11 +2,13 @@
 
 DealPilotAI is a Flask application that combines natural-language product discovery with a merchant-owned catalog, cart quoting, and a PayPal Orders v2 sandbox checkout. A separate legacy lane supports Telegram deal discovery and Amazon affiliate referrals.
 
-**Release status (2026-11-02): not verified for hackathon submission.** The automated suite passes locally, but the live AI request did not produce structured output, no buyer-approved PayPal capture has been evidenced, and no GitHub Actions run or browser checkout run has been recorded. See [the release gate matrix](docs/release/RELEASE_GATE_MATRIX.md).
+**Release status (assessed 2026-11-05): not verified for hackathon submission.** The current uncommitted working tree passes 152 tests at 76% targeted coverage, including a mocked desktop/mobile browser journey. The latest real AI request failed, no buyer-approved PayPal capture is evidenced, and the latest GitHub Actions run failed on earlier source. The verified source is HEAD `f758a163f2683d56c2c90bc85bcb9a653977c144` plus uncommitted backend, storefront, security-test, screenshot, and evidence updates. See [the release gate matrix](docs/release/RELEASE_GATE_MATRIX.md).
 
 ## Problem and solution
 
 Shopping discovery is often disconnected from checkout. DealPilotAI demonstrates a conversational path from a request to catalog-grounded recommendations and a cart, while keeping merchant-authorized products and Amazon affiliate referrals in distinct flows. A human must approve PayPal sandbox payment; the AI cannot authorize or capture a payment.
+
+**Intended users:** shoppers looking for product options based on a natural-language request or budget, and small merchants evaluating a controlled catalog-to-checkout workflow.
 
 ## Current features
 
@@ -16,13 +18,20 @@ Shopping discovery is often disconnected from checkout. DealPilotAI demonstrates
 - PayPal Orders v2 client restricted to sandbox, with request idempotency and typed ambiguous-error handling.
 - Durable commerce storage and webhook signature-verification/retry code paths.
 - Flask shop, cart, checkout return, receipt, and merchant routes.
+- Responsive commerce storefront and CSRF-protected merchant browser login with expiring sessions.
 - Separate Telegram/Amazon affiliate lane; an affiliate referral does not use this app's PayPal checkout.
 
 These are implemented capabilities, not claims that external live gates have passed. See the [test report](docs/release/TEST_REPORT.md) and [remaining blockers](docs/release/REMAINING_BLOCKERS.md).
 
 ## Screenshots and demo
 
-No genuine application screenshots, hosted demo, or public demo video are currently available in this repository. Do not use mock payment states as evidence. The [demo runbook](docs/DEMO_RUNBOOK.md) describes the recording sequence and identifies the still-required live steps.
+The following are genuine screenshots of the local application running in offline demo mode. They show the UI and merchant catalog, not live AI inference or PayPal transactions.
+
+![DealPilotAI landing page in local offline demo mode](docs/screenshots/landing-local-offline.png)
+
+![DealPilotAI merchant catalog in local offline demo mode](docs/screenshots/shop-local-offline.png)
+
+No hosted demo or public demo video is currently available. Do not use mock payment states as evidence. The [demo runbook](docs/DEMO_RUNBOOK.md) describes the recording sequence and identifies the still-required live steps.
 
 ## Architecture
 
@@ -49,7 +58,7 @@ The provider is selected with `AI_PROVIDER=openai` or `AI_PROVIDER=featherless`;
 
 ## PayPal sandbox
 
-The integration uses PayPal Orders v2 and refuses live PayPal endpoints. A read-only sandbox OAuth probe succeeded on 2026-11-02. No current buyer approval, capture ID, receipt-after-restart, or real signed webhook is evidenced. See [PayPal evidence](docs/release/PAYPAL_SANDBOX_EVIDENCE.md) and [webhook evidence](docs/release/WEBHOOK_EVIDENCE.md).
+The integration uses PayPal Orders v2 and refuses live PayPal endpoints. A historical read-only sandbox OAuth probe succeeded on 2026-11-02; it was not repeated because credentials were identified for rotation. No buyer approval, capture ID, receipt-after-restart, or real signed webhook is evidenced. See [PayPal evidence](docs/release/PAYPAL_SANDBOX_EVIDENCE.md) and [webhook evidence](docs/release/WEBHOOK_EVIDENCE.md).
 
 ## Requirements and installation
 
@@ -85,7 +94,7 @@ python scripts/ai_release_smoke.py
 
 ## Environment and profiles
 
-Required configuration is documented in [.env.example](.env.example). For a real sandbox flow, set `DEMO_MODE=false`, a strong `FLASK_SECRET_KEY`, `PAYPAL_ENVIRONMENT=sandbox`, `ENABLE_MERCHANT_CHECKOUT=true`, durable `COMMERCE_DATABASE_URL`, PayPal sandbox client ID and secret, webhook ID, and the intended AI provider plus key/model. Keep `ENABLE_EXTERNAL_AFFILIATE=false` unless an affiliate tag and compliant referral flow are intentionally configured. `scripts/config_check.py --online` performs a read-only PayPal OAuth probe; it does not create an order or capture a payment.
+Required configuration is documented in [.env.example](.env.example). For a real sandbox flow, set `DEMO_MODE=false`, a strong `FLASK_SECRET_KEY`, `PREFERRED_URL_SCHEME=https` when served behind TLS, `PAYPAL_ENVIRONMENT=sandbox`, `ENABLE_MERCHANT_CHECKOUT=true`, durable `COMMERCE_DATABASE_URL`, PayPal sandbox client ID and secret, webhook ID, and the intended AI provider plus key/model. Keep `ENABLE_EXTERNAL_AFFILIATE=false` unless an affiliate tag and compliant referral flow are intentionally configured. `scripts/config_check.py --online` performs a read-only PayPal OAuth probe; it does not create an order or capture a payment.
 
 Commerce schema initialization is managed by `CommerceStorage`; the PostgreSQL schema reference is [migrations/001_commerce.sql](migrations/001_commerce.sql). Use PostgreSQL for shared/deployed payment data. Local SQLite is for development only. Payment records must not use in-memory storage.
 
@@ -108,29 +117,28 @@ Use the isolated development dependencies:
 ```bash
 python -m compileall -q .
 python -m pip check
-python -m pytest -q
-python -m pytest --cov=ai --cov=commerce --cov=paypal_checkout --cov=web --cov-report=term-missing
-python -m playwright install --with-deps chromium
-python -m pytest -q
 python -m ruff check .
 python -m pip_audit -r requirements.lock
+python -m playwright install --with-deps chromium
+python -m pytest -q
+python -m pytest --cov=ai --cov=commerce --cov=paypal_checkout --cov=web --cov-report=term-missing
 ```
 
-GitHub Actions run [41409296241](https://github.com/RafalW3bCraft/DealPilotAI/actions/runs/41409296241) on `2b7c45b` passed 146 tests (0 failures, 6 warnings), 76% targeted coverage, Ruff correctness checks, and dependency audit; it failed at Gitleaks on false positives from blank key assignments in the test report. Those examples have been removed locally, but the fix has not been pushed or rerun. A separate Playwright checkout test is now in the worktree; local Chromium could not start because this container lacks `libatk-1.0.so.0`, and CI has not yet run that test. `ruff check .` uses the explicit correctness rule set in `pyproject.toml`; a broader pre-profile scan found 336 legacy findings. See [the test report](docs/release/TEST_REPORT.md), [CI evidence](docs/release/CI_EVIDENCE.md), and [browser evidence](docs/release/BROWSER_EVIDENCE.md).
+The current isolated local run reports 152 passed, 0 failed, 0 skipped, and 76% targeted coverage. A mocked Playwright journey passes on desktop and mobile and tests merchant browser authentication and safe AI text rendering; it is not live AI or PayPal evidence. Public GitHub Actions run [41413708891](https://github.com/RafalW3bCraft/DealPilotAI/actions/runs/41413708891) failed on earlier source, and no successful run exists for the corrected working tree. `ruff check .` uses the explicit correctness rule set in `pyproject.toml`; a broader pre-profile scan found 336 legacy findings. See [the test report](docs/release/TEST_REPORT.md), [CI evidence](docs/release/CI_EVIDENCE.md), and [browser evidence](docs/release/BROWSER_EVIDENCE.md).
 
 ## Security and limitations
 
 - Live PayPal is unsupported; all payment tests and credentials must remain sandbox-only.
 - Catalog values and totals are server-authoritative; AI output cannot change them or place an order.
 - Checkout requires buyer ownership, quote validity, CSRF/session controls, and durable storage.
-- Merchant authorization uses bearer headers, not query-string tokens.
+- Merchant browser access uses a CSRF-protected expiring session; programmatic access uses bearer headers. Query-string tokens are not accepted.
 - Demo mode uses an insecure demo-only session secret and is not suitable for public hosting.
-- No real AI inference, buyer-approved capture, signed webhook delivery, browser E2E, hosted deployment, or public video is verified as of this report.
+- No successful real AI inference, buyer-approved capture, signed webhook delivery, hosted deployment, or public video is verified. The browser test is mocked at the PayPal boundary.
 - Production readiness is separate and not established. Merchant onboarding, refunds, disputes, fraud controls, privacy obligations, operational monitoring, backup/restore, and real-payment compliance remain out of scope.
 
 ## Judge walkthrough
 
-A reproducible local catalog preview is available with the install steps above. To demonstrate AI and PayPal, provision fresh provider and PayPal sandbox credentials, complete the live steps in [DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md), and save sanitized evidence. No hosted judge URL is currently published. The Devpost draft is [docs/DEVPOST_SUBMISSION.md](docs/DEVPOST_SUBMISSION.md); it must not be presented as a verified submission until its blockers are resolved.
+A reproducible local catalog preview is available with the install steps above. To demonstrate AI and PayPal, provision fresh provider and PayPal sandbox credentials, complete the live steps in [DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md), and save sanitized evidence. No hosted judge URL or public YouTube URL is currently available. The Devpost draft is [docs/DEVPOST_SUBMISSION.md](docs/DEVPOST_SUBMISSION.md); it must not be presented as a verified submission until its blockers are resolved.
 
 ## Project history and license
 

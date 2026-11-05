@@ -1,11 +1,9 @@
 # GitHub Actions Evidence
 
-**State:** FAIL; local remediation is uncommitted.
+**Current state:** FAIL; there is no green run for the corrected working tree.
 
-Run: https://github.com/RafalW3bCraft/DealPilotAI/actions/runs/41409296241
-SHA: `2b7c45b87e404ea5dbf85e7abb07310a2ac196e9`
-Workflow: `CI`, completed 2026-11-02 with conclusion `failure`.
+The public run for current HEAD `f758a163f2683d56c2c90bc85bcb9a653977c144` is [41413708891](https://github.com/RafalW3bCraft/DealPilotAI/actions/runs/41413708891). It completed with failure in the **Unit and integration tests** step. The local failure was traced to the Playwright browser test: invalid viewport argument placement and an approval URL without the mock order token.
 
-The run passed setup, dependency installation, compile, `pip check`, Ruff, 146 tests (0 failures, 6 warnings), coverage (76%), and dependency audit. Gitleaks failed because it misclassified blank API-key assignments in `docs/release/TEST_REPORT.md` as generic API keys. The assignments have been removed locally. This fix has not been pushed or rerun, so there is no successful Actions URL and no CI PASS claim.
+The local working tree now contains backend, storefront, auth, screenshot, and browser-test changes, and its complete isolated suite passes (152 passed, 0 failed, 0 skipped). None of these changes have been pushed or run by GitHub Actions. The earlier run [41409296241](https://github.com/RafalW3bCraft/DealPilotAI/actions/runs/41409296241) on `2b7c45b` also failed, at the secret-scan stage. Therefore there is no successful Actions URL or CI PASS claim.
 
-The workflow intentionally receives no PayPal, AI, Telegram, dashboard, or database secrets. After rotating credentials, publish the reviewed remediation and current browser-test changes, then record the new run URL and exact successful SHA here.
+The workflow has least-privilege `contents: read` and receives no live AI, PayPal, Telegram, dashboard, or database secrets. GitHub CLI is not authenticated in this environment, and no repository write or workflow dispatch was performed. After reviewing and publishing the corrected candidate with authorization, rerun CI and record the successful URL and exact SHA here.

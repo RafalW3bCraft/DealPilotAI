@@ -1,7 +1,8 @@
 # Webhook Evidence
 
-**Date:** 2026-11-02
-**State:** BLOCKED for live delivery and scheduled recovery.
+- **Last implementation review:** 2026-11-02
+- **Current assessment:** 2026-11-05
+- **State:** BLOCKED for live delivery and scheduled recovery.
 
 ## Implementation present
 
@@ -9,7 +10,7 @@ The commerce routes use PayPal's verification endpoint for webhook signature ver
 
 ## Evidence available
 
-- Automated suite: 146 passed, 0 failed, 0 skipped. See [TEST_REPORT.md](TEST_REPORT.md).
+- Automated suite: 152 passed, 0 failed, 0 skipped, including a mocked desktop/mobile browser journey. See [TEST_REPORT.md](TEST_REPORT.md).
 - Sandbox OAuth: verified separately; this does not authenticate a webhook.
 - No real signed sandbox webhook delivery was received during this verification.
 - No deployment scheduler or recurring worker is configured or demonstrated.

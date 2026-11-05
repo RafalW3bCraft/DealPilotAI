@@ -1,15 +1,18 @@
-{% extends "base.html" %}
-{% block title %}Checkout{% endblock %}
-{% block head %}
-<link href="{{ url_for('static', filename='css/dealpilot.css') }}" rel="stylesheet">
-{% endblock %}
+{% extends "commerce_base.html" %}
+{% block title %}Secure checkout · DealPilot{% endblock %}
 {% block content %}
-<main class="dp-wrap">
-  <h1 class="dp-title">Checkout</h1>
-  <p>Starting PayPal sandbox checkout…</p>
-  <button id="dp-checkout-btn" class="dp-btn dp-btn-primary"
-          data-quote-id="{{ quote_id }}">Continue to PayPal (Sandbox)</button>
-  <div id="dp-checkout-msg" class="dp-notice" aria-live="polite"></div>
+<main class="dp-page dp-checkout-page" id="main-content">
+  <nav class="dp-breadcrumbs" aria-label="Breadcrumb"><a href="{{ url_for('commerce.shop') }}">Shop</a><span aria-hidden="true">/</span><span aria-current="page">Checkout</span></nav>
+  <section class="dp-panel dp-checkout-card" aria-labelledby="checkout-title">
+    <span class="dp-checkout-icon" aria-hidden="true">↗</span>
+    <p class="dp-eyebrow">PAYMENT APPROVAL</p>
+    <h1 id="checkout-title">You’re in control</h1>
+    <p class="dp-muted">We’ll securely prepare your PayPal sandbox order. You’ll review the details and approve it on PayPal before any capture is requested.</p>
+    <button id="dp-checkout-btn" class="dp-btn dp-btn-primary"
+            data-quote-id="{{ quote_id }}">Continue to PayPal Sandbox <span aria-hidden="true">→</span></button>
+    <p id="dp-checkout-msg" class="dp-form-message" aria-live="polite" role="status"></p>
+    <p class="dp-safe-note"><span aria-hidden="true">✓</span> Sandbox only · No real charges</p>
+  </section>
 </main>
 {% endblock %}
 {% block scripts %}

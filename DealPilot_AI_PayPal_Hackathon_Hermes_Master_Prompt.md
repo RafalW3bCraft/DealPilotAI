@@ -1,6 +1,6 @@
 # HERMES MASTER BUILD PROMPT — DEALPILOT AI COMMERCE
 
-**Target:** https://github.com/RafalW3bCraft/AmazonAffiliatedBot
+**Target:** https://github.com/RafalW3bCraft/DealPilotAI
 
 **Hackathon:** PayPal AI Hackathon 2026, https://paypalaihackathon.devpost.com/
 

@@ -56,7 +56,17 @@ def test_shop_page_lists_catalog_and_lanes(monkeypatch, tmp_path):
     assert 'DP-LAMP-001' in body
     assert 'Lane 1: Merchant store' in body
     assert 'Lane 2: Amazon deals' in body
-    assert 'MERCHANT - PayPal checkout' in body
+    assert 'Shop the merchant catalog' in body
+
+
+def test_landing_page_uses_commerce_shell(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    response = app.test_client().get('/')
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'Better finds.' in body
+    assert 'Skip to content' in body
+    assert 'Explore the store' in body
 
 
 def test_api_catalog_returns_8_string_priced_products(monkeypatch, tmp_path):
@@ -95,6 +105,20 @@ def test_cart_quote_server_prices_only(monkeypatch, tmp_path):
     assert '49.98' in body
     assert '24.99' in body
     assert 'DealPilot Demo Merchant' in body
+
+
+def test_cart_quote_rejects_non_integer_quantities(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    client = app.test_client()
+    token = _csrf(client)
+
+    for quantity in (1.5, True, '2.5'):
+        response = client.post(
+            '/cart/quote',
+            json={'items': [{'sku': 'DP-LAMP-001', 'quantity': quantity}]},
+            headers={'X-CSRF-Token': token},
+        )
+        assert response.status_code == 400
 
 
 def test_cart_quote_is_hidden_from_another_session(monkeypatch, tmp_path):
@@ -232,7 +256,51 @@ def test_merchant_auth_matrix(monkeypatch, tmp_path):
     app3 = _make_app(monkeypatch, tmp_path / 'c', DEMO_MODE='true')
     resp = app3.test_client().get('/merchant')
     assert resp.status_code == 200
-    assert 'DEMO MODE' in resp.get_data(as_text=True)
+    assert 'Demo mode' in resp.get_data(as_text=True)
+
+
+def test_merchant_browser_login_csrf_expiry_and_logout(monkeypatch, tmp_path):
+    import time
+    from web.auth import MERCHANT_SESSION_KEY
+
+    app = _make_app(
+        monkeypatch, tmp_path, DEMO_MODE='false',
+        FLASK_SECRET_KEY='x' * 32, DASHBOARD_TOKEN='sekrit-token',
+    )
+    client = app.test_client()
+
+    login_page = client.get('/merchant/login')
+    assert login_page.status_code == 200
+    assert 'Merchant access token' in login_page.get_data(as_text=True)
+    assert client.post('/merchant/login', data={'token': 'sekrit-token'}).status_code == 403
+
+    csrf = _csrf(client)
+    wrong = client.post(
+        '/merchant/login',
+        data={'csrf_token': csrf, 'token': 'wrong-token'},
+    )
+    assert wrong.status_code == 401
+    assert client.get('/merchant').status_code == 401
+
+    accepted = client.post(
+        '/merchant/login',
+        data={'csrf_token': csrf, 'token': 'sekrit-token'},
+    )
+    assert accepted.status_code == 302
+    assert client.get('/merchant').status_code == 200
+
+    with client.session_transaction() as session:
+        session[MERCHANT_SESSION_KEY] = int(time.time()) - 1
+    assert client.get('/merchant').status_code == 401
+
+    accepted = client.post(
+        '/merchant/login',
+        data={'csrf_token': csrf, 'token': 'sekrit-token'},
+    )
+    assert accepted.status_code == 302
+    logout = client.post('/merchant/logout', data={'csrf_token': csrf})
+    assert logout.status_code == 302
+    assert client.get('/merchant').status_code == 401
 
 
 def test_ai_recommend_fallback_and_injection_safety(monkeypatch, tmp_path):

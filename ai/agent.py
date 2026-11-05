@@ -13,6 +13,7 @@ reaches a shopper. Provider selection:
 from __future__ import annotations
 
 import json
+import html
 import logging
 import re
 import time
@@ -179,9 +180,12 @@ class AIShoppingService:
         if not rows:  # broad fallback snapshot so the model sees the catalog
             rows = self.tools.catalog_search(query="", limit=8)
         catalog_block = "\n".join(
-            f"- sku={r['sku']} | title={r['title']} | price={r['price']} "
-            f"{r['currency']} | category={r['category']} | stock={r['stock']} "
-            f"| description={r['description']}"
+            f"- sku={html.escape(str(r['sku']), quote=True)} "
+            f"| title={html.escape(str(r['title']), quote=True)} "
+            f"| price={r['price']} {html.escape(str(r['currency']), quote=True)} "
+            f"| category={html.escape(str(r['category']), quote=True)} "
+            f"| stock={r['stock']} "
+            f"| description={html.escape(str(r['description']), quote=True)}"
             for r in rows
         ) or "(catalog empty)"
         system = _SYSTEM_PROMPT.format(catalog_block=catalog_block)

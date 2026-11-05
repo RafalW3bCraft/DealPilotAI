@@ -24,11 +24,14 @@ from flask import (
     redirect,
     render_template,
     request,
+    session,
     url_for,
 )
 
 from web import views as vm
 from web.auth import (
+    MERCHANT_SESSION_KEY,
+    MERCHANT_SESSION_TTL_SECONDS,
     csrf_token,
     current_actor_id,
     ensure_actor,
@@ -633,8 +636,15 @@ def create_commerce_blueprint(config):
         ai = svc.get('ai_service')
         if ai is None:
             return _lane_unavailable('ai')
-        data = request.get_json(silent=True) or {}
-        query = str(data.get('query', ''))[:500]
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({'error': 'a JSON object is required'}), 400
+        query = data.get('query')
+        if not isinstance(query, str) or not query.strip():
+            return jsonify({'error': 'query must be a non-empty string'}), 400
+        if len(query) > 500:
+            return jsonify({'error': 'query must be 500 characters or fewer'}), 400
+        query = query.strip()
         locale = str(data.get('locale', request.args.get('lang', 'en')))[:8]
         budget = data.get('budget')
         try:
@@ -693,17 +703,36 @@ def create_commerce_blueprint(config):
         if cart is None:
             return _lane_unavailable('cart')
         actor = ensure_actor()
-        data = request.get_json(silent=True) or {}
-        items = data.get('items') or []
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({'error': 'a JSON object is required'}), 400
+        items = data.get('items')
+        if not isinstance(items, list) or not items or len(items) > 10:
+            return jsonify({'error': 'items must contain between 1 and 10 entries'}), 400
         # Only sku+quantity are honored; any client-sent price is discarded.
         clean = []
-        for it in items[:10]:
+        for it in items:
             if not isinstance(it, dict):
-                continue
+                return jsonify({'error': 'each item must be an object'}), 400
             try:
-                clean.append({'sku': str(it.get('sku', '')), 'quantity': int(it.get('quantity', 1))})
+                sku = it.get('sku')
+                quantity = it.get('quantity', 1)
+                if not isinstance(sku, str) or not sku.strip():
+                    raise ValueError('sku must be a non-empty string')
+                if isinstance(quantity, bool):
+                    raise ValueError('quantity must be an integer')
+                if isinstance(quantity, int):
+                    validated_quantity = quantity
+                elif isinstance(quantity, str) and quantity.strip().isdecimal():
+                    validated_quantity = int(quantity.strip())
+                else:
+                    raise ValueError('quantity must be an integer')
+                clean.append({
+                    'sku': sku.strip(),
+                    'quantity': validated_quantity,
+                })
             except (TypeError, ValueError):
-                continue
+                return jsonify({'error': 'each item needs a valid SKU and quantity'}), 400
         cart_errors = _cart_errors()
         if cart_errors != (ValueError,):
             try:
@@ -802,6 +831,13 @@ def create_commerce_blueprint(config):
         except Exception as e:
             logger.error(f'checkout_start unexpected: {e}')
             return jsonify({'error': 'checkout failed'}), 500
+        if not result.get('approve_url'):
+            return jsonify({
+                'error': 'approval link is not available yet',
+                'detail': 'The existing checkout is being recovered. Retry shortly; a duplicate PayPal order will not be created.',
+                'attempt_id': result.get('attempt_id'),
+                'status': result.get('status'),
+            }), 202
         return jsonify({
             'approve_url': result.get('approve_url'),
             'attempt_id': result.get('attempt_id'),
@@ -926,6 +962,59 @@ def create_commerce_blueprint(config):
 
     # -- merchant dashboard -----------------------------------------------------
 
+    @bp.route('/merchant/login', methods=['GET', 'POST'])
+    def merchant_login():
+        if getattr(config, 'DEMO_MODE', False) or is_merchant(config):
+            return redirect(url_for('commerce.merchant'))
+
+        services = _services()
+        rate_bucket = services.get('rate_bucket', _RateBucket())
+        if request.method == 'POST':
+            if not verify_csrf():
+                return jsonify({'error': 'invalid or missing CSRF token'}), 403
+            rate_key = f"merchant-login:{request.remote_addr or 'unknown'}"
+            if not rate_bucket.allow(rate_key):
+                return render_template(
+                    'merchant_login.html',
+                    error='Too many attempts. Wait a minute and try again.',
+                    unavailable=False,
+                ), 429
+
+            expected = getattr(config, 'DASHBOARD_TOKEN', '') or ''
+            provided = request.form.get('token', '')
+            if expected and hmac.compare_digest(provided, expected):
+                session[MERCHANT_SESSION_KEY] = (
+                    int(time.time()) + MERCHANT_SESSION_TTL_SECONDS
+                )
+                session.permanent = True
+                response = redirect(url_for('commerce.merchant'))
+                response.headers['Cache-Control'] = 'no-store'
+                return response
+            response = current_app.make_response(render_template(
+                'merchant_login.html',
+                error='Sign-in failed. Check the merchant access token.',
+                unavailable=not bool(expected),
+            ))
+            response.status_code = 401
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+
+        response = current_app.make_response(render_template(
+            'merchant_login.html',
+            error=None,
+            unavailable=not bool(getattr(config, 'DASHBOARD_TOKEN', '')),
+        ))
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
+    @bp.route('/merchant/logout', methods=['POST'])
+    def merchant_logout():
+        if not verify_csrf():
+            return jsonify({'error': 'invalid or missing CSRF token'}), 403
+        session.pop(MERCHANT_SESSION_KEY, None)
+        session.permanent = False
+        return redirect(url_for('commerce.merchant_login'))
+
     @bp.route('/merchant')
     @require_merchant
     def merchant():
@@ -972,12 +1061,14 @@ def create_commerce_blueprint(config):
             'currency': raw_stats.get('currency', getattr(config, 'PAYPAL_CURRENCY', 'USD')),
             'abandoned_carts': abandoned,
         }
-        return render_template(
+        response = current_app.make_response(render_template(
             'merchant.html', orders=orders, stats=stats, gmv=gmv,
             sessions=sessions, by_status_items=list(by_status.items()),
             fulfillment=vm.FULFILLMENT_TEXT,
             sandbox_note=vm.SANDBOX_RECEIPT_NOTE,
-        )
+        ))
+        response.headers['Cache-Control'] = 'no-store'
+        return response
 
     # -- PayPal webhook ------------------------------------------------------------
 

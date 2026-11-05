@@ -1,16 +1,33 @@
-{% extends "base.html" %}
-{% block title %}DealPilot{% endblock %}
-{% block head %}
-<link href="{{ url_for('static', filename='css/dealpilot.css') }}" rel="stylesheet">
-{% endblock %}
+{% extends "commerce_base.html" %}
+{% block title %}DealPilot · Better shopping starts here{% endblock %}
 {% block content %}
-<main class="dp-wrap">
-  <h1 class="dp-title">DealPilot AI Commerce</h1>
-  <section class="dp-lanes" aria-label="Shopping lanes">
-    <p><strong>Lane 1: Merchant store - buy with PayPal sandbox.</strong></p>
-    <p><strong>Lane 2: Amazon deals - external affiliate links, checkout on Amazon.</strong></p>
+<main class="dp-page dp-landing" id="main-content">
+  <section class="dp-hero" aria-labelledby="landing-title">
+    <div class="dp-hero-copy">
+      <p class="dp-eyebrow">CONVERSATIONAL COMMERCE, WITH YOU IN CONTROL</p>
+      <h1 id="landing-title">Better finds.<br><span>More confident choices.</span></h1>
+      <p class="dp-hero-description">
+        Describe what you are looking for. DealPilot brings you back to a real merchant catalog,
+        clear pricing, and a checkout that waits for your approval.
+      </p>
+      <a class="dp-btn dp-btn-primary" href="{{ url_for('commerce.shop') }}">Explore the store <span aria-hidden="true">→</span></a>
+      <p class="dp-hero-disclaimer">Demo experience · PayPal sandbox only · No real charges</p>
+    </div>
+    <div class="dp-hero-art" aria-hidden="true">
+      <div class="dp-art-orbit dp-art-orbit-one"></div>
+      <div class="dp-art-orbit dp-art-orbit-two"></div>
+      <div class="dp-art-card">
+        <span class="dp-art-spark">✦</span>
+        <span class="dp-art-kicker">A BETTER WAY TO DISCOVER</span>
+        <strong>Ask. Compare.<br>Choose with confidence.</strong>
+        <span class="dp-art-pills"><i></i><i></i><i></i></span>
+      </div>
+    </div>
   </section>
-  <p><a class="dp-btn dp-btn-primary" href="{{ url_for('commerce.shop') }}">Enter the shop</a></p>
-  <p><a href="/">Existing bot dashboard</a></p>
+  <section class="dp-value-grid" aria-label="How DealPilot works">
+    <article><span>01</span><h2>Start with what you need</h2><p>Use your own words to describe a product or budget.</p></article>
+    <article><span>02</span><h2>See grounded options</h2><p>Recommendations are checked against merchant SKUs and prices.</p></article>
+    <article><span>03</span><h2>You stay in control</h2><p>Review the cart and approve any sandbox payment yourself.</p></article>
+  </section>
 </main>
 {% endblock %}

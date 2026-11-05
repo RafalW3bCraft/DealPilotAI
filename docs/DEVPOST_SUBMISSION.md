@@ -33,7 +33,7 @@ DealPilotAI provides a conversational interface over a merchant-owned catalog, c
 
 ## How AI is used
 
-The AIShoppingService sends the shopper's request and catalog context to an explicitly configured OpenAI-compatible provider. The service validates structured output, drops unknown SKUs, corrects prices from the merchant catalog, and never authorizes or captures payment. When inference is unavailable, the deterministic fallback is labeled as such. As of the current verification, the live provider did not return usable output, so a successful real inference has not been demonstrated; this submission section must be updated after a fresh successful smoke test.
+The AIShoppingService sends the shopper's request and catalog context to an explicitly configured OpenAI-compatible provider. The service validates structured output, drops unknown SKUs, corrects prices from the merchant catalog, and never authorizes or captures payment. The last attempted live configuration was Featherless with `Qwen/Qwen3.8-27B`; it returned no usable output, so a successful real inference has not been demonstrated. When inference is unavailable, the deterministic fallback is labeled as such.
 
 ## How PayPal is used
 
@@ -53,7 +53,7 @@ Key engineering challenges include keeping AI output subordinate to catalog trut
 
 ## Testing and verification
 
-Current local test report: 146 passed, 0 failed, 0 skipped; 76% targeted coverage. A PayPal sandbox OAuth probe passed. Live AI smoke did not pass; no buyer-approved capture, real signed webhook, browser E2E, or GitHub Actions run is currently verified. See `docs/release/` for the evidence and exact blockers.
+Current local test report: 152 passed, 0 failed, 0 skipped; 76% targeted coverage, installed and run in a fresh Python 3.14.2 virtual environment. Genuine local offline-mode landing and shop screenshots are available in the README. A mocked desktop/mobile Playwright journey passes and covers merchant browser sign-in, checkout replay recovery UX, and safe rendering of malicious AI text. The last real AI smoke failed and used fallback; the historical PayPal sandbox OAuth probe is read-only and no buyer-approved capture, real signed webhook, or successful GitHub Actions run on this uncommitted source is verified. See `docs/release/` for the evidence and exact blockers.
 
 ## Hackathon-period changes
 
@@ -68,6 +68,8 @@ Complete live provider and sandbox verification, browser coverage, recurring web
 - Repository: https://github.com/RafalW3bCraft/DealPilotAI
 - Hosted demo: not currently available.
 - Public YouTube demo: not uploaded; URL unavailable.
+- Local offline-mode screenshots: [landing page](screenshots/landing-local-offline.png), [shop](screenshots/shop-local-offline.png). These are UI screenshots, not live inference or payment evidence.
+- Recording instructions: [demo runbook](DEMO_RUNBOOK.md); a real provider response and buyer-approved sandbox capture are still required before recording the corresponding claims.
 - Hackathon: https://paypalaihackathon.devpost.com/
 - Rules: https://paypalaihackathon.devpost.com/rules
 

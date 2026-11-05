@@ -1,21 +1,20 @@
-"""Auth/session helpers for the DealPilot web layer.
+"""Authentication and CSRF helpers for the DealPilot web layer."""
 
-Buyer identity is a random actor id in the Flask session cookie. Merchant
-access is gated by DASHBOARD_TOKEN via the Authorization: Bearer header with a
-demo-mode bypass clearly labeled in the UI.
-"""
 import functools
 import hmac
 import logging
 import secrets
+import time
 import uuid
 
-from flask import abort, current_app, jsonify, request, session
+from flask import abort, current_app, jsonify, redirect, request, session, url_for
 
 logger = logging.getLogger(__name__)
 
 CSRF_SESSION_KEY = 'csrf_token'
 ACTOR_SESSION_KEY = 'actor_id'
+MERCHANT_SESSION_KEY = 'merchant_authenticated_until'
+MERCHANT_SESSION_TTL_SECONDS = 30 * 60
 
 
 def current_actor_id():
@@ -28,25 +27,20 @@ def current_actor_id():
 
 
 def ensure_actor():
-    """Ensure an actor id exists for this session. Returns it."""
+    """Ensure an actor id exists. Returns it."""
     return current_actor_id()
 
 
 def apply_security(app):
-    """Session cookie hardening. Secure flag is set when the deployment
-    serves https (checked per-request via request.scheme by Flask when the
-    config flag is a callable is not supported, so we set it statically if
-    PREFERRED_URL_SCHEME is https, otherwise rely on proxy config)."""
+    """Apply browser session-cookie protections."""
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    # Only mark cookies Secure when the app is served over https; in local
-    # demo (http) a Secure cookie would be dropped by the browser.
     scheme = app.config.get('PREFERRED_URL_SCHEME', 'http')
-    app.config['SESSION_COOKIE_SECURE'] = (scheme == 'https')
+    app.config['SESSION_COOKIE_SECURE'] = scheme == 'https'
 
 
 def csrf_token():
-    """Per-session CSRF token, created on demand."""
+    """Return a per-session CSRF token, creating one on demand."""
     token = session.get(CSRF_SESSION_KEY)
     if not token:
         token = secrets.token_urlsafe(32)
@@ -55,21 +49,22 @@ def csrf_token():
 
 
 def verify_csrf():
-    """Check the CSRF token from header or form field against the session."""
+    """Check a CSRF token from the request against the session."""
     expected = session.get(CSRF_SESSION_KEY)
     if not expected:
         return False
+    payload = request.get_json(silent=True)
     provided = (
         request.headers.get('X-CSRF-Token')
         or request.form.get('csrf_token')
-        or (request.get_json(silent=True) or {}).get('csrf_token')
+        or (payload.get('csrf_token') if isinstance(payload, dict) else '')
         or ''
     )
     return bool(provided) and hmac.compare_digest(str(provided), expected)
 
 
 def require_csrf(view):
-    """Decorator: 403 on POST writes without a valid CSRF token."""
+    """Return 403 for write requests without a valid CSRF token."""
     @functools.wraps(view)
     def wrapper(*args, **kwargs):
         if not verify_csrf():
@@ -81,38 +76,42 @@ def require_csrf(view):
 def _merchant_token_valid(config):
     token = getattr(config, 'DASHBOARD_TOKEN', '') or ''
     if not token:
-        return None  # no token configured
+        return None
     provided = request.headers.get('Authorization', '')
     if not provided.startswith('Bearer '):
         return False
-    provided = provided[7:]
-    return bool(provided) and hmac.compare_digest(str(provided), token)
+    return bool(provided[7:]) and hmac.compare_digest(provided[7:], token)
+
+
+def _merchant_session_valid():
+    try:
+        expires_at = int(session.get(MERCHANT_SESSION_KEY, 0))
+    except (TypeError, ValueError):
+        expires_at = 0
+    if expires_at > int(time.time()):
+        return True
+    session.pop(MERCHANT_SESSION_KEY, None)
+    return False
 
 
 def is_merchant(config):
-    """True only when the request carries a valid merchant token.
-
-    DEMO_MODE opens the /merchant *page* (via require_merchant), but it must
-    never make an arbitrary requester 'merchant' for buyer-order ownership
-    checks - otherwise any demo visitor could read every order.
-    """
-    valid = _merchant_token_valid(config)
-    return bool(valid)
+    """True for a valid bearer request or a non-expired merchant session."""
+    return _merchant_token_valid(config) is True or _merchant_session_valid()
 
 
 def require_merchant(view):
-    """Merchant gate: DASHBOARD_TOKEN via Authorization: Bearer only. With no
-    token configured: 404 in production (fail closed), allowed in DEMO_MODE with
-    a visible banner (templates read `demo_mode`)."""
+    """Require merchant auth, except for the explicitly labeled offline demo."""
     @functools.wraps(view)
     def wrapper(*args, **kwargs):
         config = current_app.extensions['dealpilot']['config']
-        valid = _merchant_token_valid(config)
-        if valid is None:
-            if getattr(config, 'DEMO_MODE', False):
-                return view(*args, **kwargs)
+        token_valid = _merchant_token_valid(config)
+        if token_valid is True or _merchant_session_valid():
+            return view(*args, **kwargs)
+        if token_valid is None and getattr(config, 'DEMO_MODE', False):
+            return view(*args, **kwargs)
+        if request.method == 'GET' and request.accept_mimetypes.accept_html:
+            return redirect(url_for('commerce.merchant_login'))
+        if token_valid is None:
             abort(404)
-        if not valid:
-            return jsonify({'error': 'authentication required'}), 401
-        return view(*args, **kwargs)
+        return jsonify({'error': 'authentication required'}), 401
     return wrapper

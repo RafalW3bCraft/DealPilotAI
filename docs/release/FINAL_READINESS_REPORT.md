@@ -1,29 +1,29 @@
 # Final Readiness Report
 
-**Assessment date:** 2026-11-02
-**Repository:** https://github.com/RafalW3bCraft/DealPilotAI
-**Branch/current HEAD:** `main` / `2b7c45b87e404ea5dbf85e7abb07310a2ac196e9`
-**Candidate status:** this HEAD matches the local `origin/main` tracking ref; additional browser-test and report corrections remain uncommitted. No successful CI run is evidenced.
+- **Assessment date:** 2026-11-05
+- **Repository:** https://github.com/RafalW3bCraft/DealPilotAI
+- **Branch/current HEAD:** `main` / `f758a163f2683d56c2c90bc85bcb9a653977c144`
+- **Verification source:** current HEAD plus uncommitted backend, storefront, test-isolation, security-test, screenshot, and browser-test changes. No commit was created.
 
-## Verified
+## Verified locally
 
-- Clean isolated local suite: 146 passed, 0 failed, 0 skipped; targeted coverage 76%.
-- Python compilation and `pip check` passed.
-- Configured Ruff correctness profile passed; broad legacy scan had 336 findings.
-- Pinned dependency audit reported no known vulnerabilities.
-- PayPal sandbox OAuth passed as a read-only check.
-- Checkout replay recovery and bearer-only merchant authentication have regression coverage.
+- Fresh Python 3.14.2 virtual environment and isolated full offline test run: 152 passed, 0 failed, 0 skipped; 6 warnings in the standard run, 112 warnings in the coverage run.
+- Targeted `ai`, `commerce`, `paypal_checkout`, and `web` coverage: 76%.
+- Focused route, security, and desktop/mobile mocked browser tests: 30 passed; browser journey includes merchant authentication, malicious AI text rendering, and landing-page rendering.
+- `compileall`, `pip check`, configured Ruff rules, `pip-audit` (no known vulnerabilities), JavaScript syntax check, and `git diff --check`: passed.
+- CI workflow YAML syntax parsed successfully; no workflow change was made. No successful Actions run exists for this worktree.
 
-## Not verified or failed
+## Failed, blocked, or not run
 
-- Live AI failed: configured Featherless model returned empty content and fallback was true; default model returned a permission error.
-- No buyer-approved PayPal capture, capture evidence, persistence-after-restart, or real duplicate-capture check.
-- No genuine signed webhook delivery or scheduled retry demonstration.
-- Browser test added after the current HEAD; local Chromium could not launch because `libatk-1.0.so.0` is absent, and CI has not run that test. GitHub Actions run [41409296241](https://github.com/RafalW3bCraft/DealPilotAI/actions/runs/41409296241) passed tests/coverage/audit but failed Gitleaks on two false positives; the remediation is uncommitted. No hosted judge demo, screenshots, or public video.
-- Credentials appeared in local session/tool output and need rotation before further live testing.
-- Devpost materials are a draft; no actual submission or verified public links exist.
+- **AI:** the last real Featherless attempts failed (fallback used for an empty response; default model denied). No successful live model call is evidenced. Do not retry until exposed provider credentials are rotated.
+- **PayPal:** no buyer-approved order, capture ID, completed capture, receipt-after-restart, or real duplicate-capture test is evidenced. Prior OAuth-only evidence is not a payment pass; rotate the exposed credentials before retrying.
+- **Webhooks:** no authentic signed event or recurring retry schedule was demonstrated.
+- **Database-specific checks:** no PostgreSQL test service was available, so PostgreSQL transaction/concurrency behavior remains unverified.
+- **Security:** auth/CSRF route regressions passed locally; credential rotation, history review, and a complete release security review remain outstanding.
+- **CI:** current public run [41413708891](https://github.com/RafalW3bCraft/DealPilotAI/actions/runs/41413708891) failed tests on the pre-correction source. No successful run exists for the corrected working tree.
+- **Demo/submission:** genuine local offline-mode landing and shop screenshots are included in the README. No hosted demo, public YouTube video, or submitted Devpost entry is evidenced.
 
-See the [gate matrix](RELEASE_GATE_MATRIX.md) and [remaining blockers](REMAINING_BLOCKERS.md) for action-level status.
+See the [gate matrix](RELEASE_GATE_MATRIX.md), [test report](TEST_REPORT.md), and [remaining blockers](REMAINING_BLOCKERS.md).
 
 ## Verdicts
 
@@ -31,4 +31,4 @@ HACKATHON NOT READY — MANDATORY REQUIREMENTS FAILED
 
 PRODUCTION NOT READY
 
-Do not submit or represent the project as fully verified until every mandatory gate is PASS. No live-money payment path is supported.
+Do not represent the project as fully verified or production-ready. No live-money payment path is supported.

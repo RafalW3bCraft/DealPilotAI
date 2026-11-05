@@ -1,53 +1,101 @@
-{% extends "base.html" %}
-{% block title %}{{ labels.shop_title }}{% endblock %}
-{% block head %}
-<link href="{{ url_for('static', filename='css/dealpilot.css') }}" rel="stylesheet">
-{% endblock %}
+{% extends "commerce_base.html" %}
+{% block title %}{{ labels.shop_title }} · DealPilot{% endblock %}
+{% block document_lang %}{{ lang|default('en') }}{% endblock %}
 {% block content %}
-<main class="dp-wrap" lang="{{ lang }}">
-  <h1 class="dp-title">{{ labels.shop_title }}</h1>
-
-  <section class="dp-lanes" aria-label="Shopping lanes">
-    <p><strong>{{ labels.lane1 }}</strong></p>
-    <p><strong>{{ labels.lane2 }}</strong></p>
+<main class="dp-page" id="main-content" lang="{{ lang }}">
+  <section class="dp-hero" aria-labelledby="shop-title">
+    <div class="dp-hero-copy">
+      <p class="dp-eyebrow">A MORE THOUGHTFUL WAY TO SHOP</p>
+      <h1 id="shop-title">Find your next favorite.<br><span>Skip the guesswork.</span></h1>
+      <p class="dp-hero-description">
+        Tell the shopping assistant what you need. Recommendations are grounded in the merchant catalog,
+        and you always review the real price before checkout.
+      </p>
+      <a class="dp-btn dp-btn-primary" href="#assistant">Find something for me <span aria-hidden="true">↓</span></a>
+    </div>
+    <div class="dp-hero-art" aria-hidden="true">
+      <div class="dp-art-orbit dp-art-orbit-one"></div>
+      <div class="dp-art-orbit dp-art-orbit-two"></div>
+      <div class="dp-art-card">
+        <span class="dp-art-spark">✦</span>
+        <span class="dp-art-kicker">YOUR SHOPPING, SIMPLIFIED</span>
+        <strong>Good finds.<br>Clear choices.</strong>
+        <span class="dp-art-pills"><i></i><i></i><i></i></span>
+      </div>
+    </div>
   </section>
 
-  <section class="dp-ai-panel" aria-label="Shopping assistant">
-    <h2>{{ labels.ask_ai }}</h2>
-    <form id="dp-ai-form">
-      <label for="dp-ai-query">{{ labels.search }}</label>
-      <input type="text" id="dp-ai-query" name="query" maxlength="500"
-             placeholder="e.g. desk organization under $20" autocomplete="off">
-      <button type="submit" class="dp-btn">{{ labels.ask_ai }}</button>
+  <section class="dp-lanes" aria-label="Shopping options">
+    <article class="dp-lane-card dp-lane-merchant">
+      <span class="dp-lane-icon" aria-hidden="true">01</span>
+      <div><h2>Shop the merchant catalog</h2><p>{{ labels.lane1 }}</p></div>
+      <span class="dp-lane-arrow" aria-hidden="true">↗</span>
+    </article>
+    <article class="dp-lane-card dp-lane-affiliate">
+      <span class="dp-lane-icon" aria-hidden="true">02</span>
+      <div><h2>Explore community deals</h2><p>{{ labels.lane2 }}</p></div>
+      <a class="dp-lane-arrow" href="{{ url_for('deals_page') }}" aria-label="Explore community deals">↗</a>
+    </article>
+  </section>
+
+  <section class="dp-assistant-section" id="assistant" aria-labelledby="assistant-title">
+    <div class="dp-section-heading">
+      <div><p class="dp-eyebrow">PERSONAL SHOPPING ASSISTANT</p><h2 id="assistant-title">{{ labels.ask_ai }}</h2></div>
+      <span class="dp-assistant-tag"><span aria-hidden="true">✦</span> Catalog grounded</span>
+    </div>
+    <form id="dp-ai-form" class="dp-assistant-form">
+      <label class="dp-visually-hidden" for="dp-ai-query">{{ labels.search }}</label>
+      <input type="text" id="dp-ai-query" name="query" maxlength="500" required
+             placeholder="Try “a compact desk lamp under $30”" autocomplete="off">
+      <button type="submit" class="dp-btn dp-btn-primary">{{ labels.ask_ai }} <span aria-hidden="true">→</span></button>
     </form>
-    <div id="dp-ai-results" class="dp-ai-results" aria-live="polite"></div>
+    <p class="dp-assistant-hint">Recommendations are suggestions, not a purchase. Prices and availability are confirmed by the merchant catalog.</p>
+    <div id="dp-ai-results" class="dp-ai-results" aria-live="polite" aria-atomic="true"></div>
   </section>
 
-  <section aria-label="Product catalog">
+  <section class="dp-catalog-section" aria-labelledby="catalog-title">
+    <div class="dp-section-heading">
+      <div><p class="dp-eyebrow">HANDPICKED FOR YOU</p><h2 id="catalog-title">Explore the catalog</h2></div>
+      <span class="dp-catalog-count">{{ products|length }} products</span>
+    </div>
     <form id="dp-quote-form" method="post" action="{{ url_for('commerce.cart_quote') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="dp-grid" id="dp-grid">
         {% for p in products %}
         <article class="dp-card">
-          <span class="dp-badge">{{ p.lane }}</span>
+          <div class="dp-card-art dp-card-art-{{ loop.index % 4 }}" aria-hidden="true">
+            <span>{{ '%02d'|format(loop.index) }}</span><span class="dp-card-spark">✦</span>
+          </div>
+          <div class="dp-card-meta"><span class="dp-badge">{{ p.category }}</span><span class="dp-card-sku">{{ p.sku }}</span></div>
           <h3 class="dp-card-title">{{ p.title }}</h3>
           <p class="dp-card-desc">{{ p.description }}</p>
-          <p class="dp-card-price">{{ p.price }} {{ p.currency }}</p>
-          <p class="dp-card-stock">{{ labels.stock }}: {{ p.stock }}</p>
+          <div class="dp-card-purchase">
+            <p class="dp-card-price"><span class="dp-price-value">{{ p.price }}</span><span>{{ p.currency }}</span></p>
+            <p class="dp-card-stock {% if p.stock <= 0 %}dp-out-of-stock{% endif %}">
+              {% if p.stock > 0 %}<span class="dp-stock-dot" aria-hidden="true"></span>{{ labels.stock }}: {{ p.stock }}
+              {% else %}Currently unavailable{% endif %}
+            </p>
+          </div>
           <div class="dp-card-actions">
-            <label>
-              <input type="checkbox" name="sel" value="{{ p.sku }}" data-sku="{{ p.sku }}">
-              {{ labels.add_to_cart }}
+            <label class="dp-add-label">
+              <input type="checkbox" name="sel" value="{{ p.sku }}" data-sku="{{ p.sku }}" {% if p.stock <= 0 %}disabled{% endif %}>
+              <span>{{ labels.add_to_cart }}</span>
             </label>
             <label class="dp-qty-label">{{ labels.quantity }}
-              <input type="number" name="qty_{{ p.sku }}" min="1" max="10" value="1"
-                     aria-label="{{ labels.quantity }} {{ p.sku }}">
+              <input type="number" name="qty_{{ p.sku }}" min="1" max="{{ [10, p.stock]|min if p.stock > 0 else 1 }}" value="1"
+                     aria-label="{{ labels.quantity }} {{ p.title }}" {% if p.stock <= 0 %}disabled{% endif %}>
             </label>
           </div>
         </article>
+        {% else %}
+        <p class="dp-empty-state">The catalog is temporarily unavailable. Please try again later.</p>
         {% endfor %}
       </div>
-      <button type="submit" class="dp-btn dp-btn-primary">{{ labels.view_cart }}</button>
+      <div class="dp-catalog-actions">
+        <p>Every cart total is calculated from current merchant prices.</p>
+        <button type="submit" class="dp-btn dp-btn-primary">{{ labels.view_cart }} <span aria-hidden="true">→</span></button>
+      </div>
+      <p id="dp-quote-msg" class="dp-form-message" role="status" aria-live="polite"></p>
     </form>
   </section>
 </main>

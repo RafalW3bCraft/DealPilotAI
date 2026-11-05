@@ -1,12 +1,12 @@
-# Baseline Inventory — DealPilotAI (renamed from AmazonAffiliatedBot)
+# Baseline Inventory — DealPilotAI
 
 Audit date: 2026-10-31. Auditor: Hermes agent, Phase 0 of master build & release audit.
+This historical inventory's old repository reference has been replaced with the canonical repository URL.
 
 ## Repository facts (verified via git)
 
-- Working dir: `/mnt/hostname/DealPilotAI` (renamed from `/mnt/hostname/AmazonAffiliatedBot`;
-  a stale `.venv` still referenced the old path and had to be recreated).
-- Remote: `https://github.com/RafalW3bCraft/AmazonAffiliatedBot.git`
+- Working dir: `/mnt/hostname/DealPilotAI` (a stale `.venv` still referenced a prior checkout path and had to be recreated).
+- Remote: `https://github.com/RafalW3bCraft/DealPilotAI.git`
 - Branches: `main` (origin HEAD), `feature/paypal-ai-dealpilot-2026` (current, local only)
 - Merge-base with main: `c3d3078` (last public pre-hackathon state)
 - Hackathon-period commits on this branch:

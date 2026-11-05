@@ -287,6 +287,13 @@ def test_session_cookie_flags(monkeypatch, tmp_path):
     # Secure only under https scheme; local demo runs http.
     assert app.config['SESSION_COOKIE_SECURE'] is False
 
+    https_app = _make_app(
+        monkeypatch, tmp_path / 'https', DEMO_MODE='false',
+        FLASK_SECRET_KEY='h' * 32, DASHBOARD_TOKEN='session-test-token',
+        PREFERRED_URL_SCHEME='https',
+    )
+    assert https_app.config['SESSION_COOKIE_SECURE'] is True
+
 
 # -- 6. payment-record durability gate --------------------------------------------
 

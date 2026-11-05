@@ -37,6 +37,9 @@ class Config:
         
         self.FLASK_HOST = os.getenv('FLASK_HOST', '0.0.0.0')
         self.FLASK_PORT = int(os.getenv('FLASK_PORT', '5000'))
+        self.PREFERRED_URL_SCHEME = os.getenv('PREFERRED_URL_SCHEME', 'http').strip().lower()
+        if self.PREFERRED_URL_SCHEME not in {'http', 'https'}:
+            raise RuntimeError("PREFERRED_URL_SCHEME must be 'http' or 'https'.")
 
         # Demo / offline mode: allows catalog browsing without secrets.
         self.DEMO_MODE = os.getenv('DEMO_MODE', 'false').lower() in ('1', 'true', 'yes')

@@ -1,0 +1,28 @@
+{% extends "commerce_base.html" %}
+{% block title %}Merchant sign in · DealPilot{% endblock %}
+{% block content %}
+<main class="dp-page dp-auth-page" id="main-content">
+  <section class="dp-auth-card" aria-labelledby="merchant-login-title">
+    <p class="dp-eyebrow">PRIVATE MERCHANT AREA</p>
+    <h1 id="merchant-login-title">Welcome back</h1>
+    <p class="dp-muted">Sign in to review sandbox orders and store activity.</p>
+    {% if unavailable %}
+      <p class="dp-alert dp-alert-error" role="alert">
+        Merchant access is not configured. Set a strong <code>DASHBOARD_TOKEN</code> on the server.
+      </p>
+    {% elif error %}
+      <p class="dp-alert dp-alert-error" role="alert">{{ error }}</p>
+    {% endif %}
+    {% if not unavailable %}
+    <form class="dp-form-stack" method="post" action="{{ url_for('commerce.merchant_login') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="merchant-token">Merchant access token</label>
+      <input id="merchant-token" name="token" type="password" autocomplete="current-password"
+             required {% if unavailable %}disabled{% endif %}>
+      <button class="dp-btn dp-btn-primary" type="submit">Sign in securely</button>
+    </form>
+    {% endif %}
+    <a class="dp-text-link" href="{{ url_for('commerce.shop') }}">Back to the store</a>
+  </section>
+</main>
+{% endblock %}
