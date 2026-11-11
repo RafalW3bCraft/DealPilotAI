@@ -58,7 +58,7 @@
       <div><p class="dp-eyebrow">HANDPICKED FOR YOU</p><h2 id="catalog-title">Explore the catalog</h2></div>
       <span class="dp-catalog-count">{{ products|length }} products</span>
     </div>
-    {% if not checkout_enabled|default(true) %}<p class="dp-alert dp-alert-info" role="status">Merchant checkout is currently unavailable. You can browse the catalog and explore community deals.</p>{% endif %}
+    {% if not checkout_enabled|default(true) %}<p class="dp-alert dp-alert-info" role="status">Merchant checkout is currently unavailable. You can browse and prepare a cart; payment requires configured PayPal sandbox access.</p>{% endif %}
     <form id="dp-quote-form" method="post" action="{{ url_for('commerce.cart_quote') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="dp-grid" id="dp-grid">
@@ -89,12 +89,12 @@
           </div>
           <div class="dp-card-actions">
             <label class="dp-add-label">
-              <input type="checkbox" name="sel" value="{{ p.sku }}" data-sku="{{ p.sku }}" {% if p.stock <= 0 or not checkout_enabled|default(true) %}disabled{% endif %}>
+              <input type="checkbox" name="sel" value="{{ p.sku }}" data-sku="{{ p.sku }}" {% if p.stock <= 0 or not cart_enabled|default(true) %}disabled{% endif %}>
               <span>{{ labels.add_to_cart }}</span>
             </label>
             <label class="dp-qty-label">{{ labels.quantity }}
               <input type="number" name="qty_{{ p.sku }}" min="1" max="{{ [10, p.stock]|min if p.stock > 0 else 1 }}" value="1"
-                     aria-label="{{ labels.quantity }} {{ p.title }}" {% if p.stock <= 0 or not checkout_enabled|default(true) %}disabled{% endif %}>
+                     aria-label="{{ labels.quantity }} {{ p.title }}" {% if p.stock <= 0 or not cart_enabled|default(true) %}disabled{% endif %}>
             </label>
           </div>
         </article>
@@ -104,7 +104,7 @@
       </div>
       <div class="dp-catalog-actions">
         <p>Every cart total is calculated from current merchant prices.</p>
-        <button type="submit" class="dp-btn dp-btn-primary" {% if not products or not checkout_enabled|default(true) %}disabled{% endif %}>{{ labels.view_cart }} <span aria-hidden="true">→</span></button>
+        <button type="submit" class="dp-btn dp-btn-primary" {% if not products or not cart_enabled|default(true) %}disabled{% endif %}>{{ labels.view_cart }} <span aria-hidden="true">→</span></button>
       </div>
       <p id="dp-quote-msg" class="dp-form-message" role="status" aria-live="polite"></p>
     </form>

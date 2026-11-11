@@ -50,7 +50,14 @@ def _readable_bool(value):
 
 
 def main():
+    PROBLEMS.clear()
+    WARNINGS.clear()
     online = '--online' in sys.argv
+    try:
+        from config import Config
+        Config()
+    except Exception as exc:
+        _add('syntax', f'Application startup configuration rejected ({type(exc).__name__}); check callback origin, private session key, AI settings and sandbox configuration.')
     demo_mode = _readable_bool(_get('DEMO_MODE', 'false'))
     provider = _get('AI_PROVIDER', '').lower()
     ai_key_present = bool(_get('OPENAI_API_KEY') or _get('FEATHERLESS_API_KEY'))
@@ -110,7 +117,7 @@ def main():
         status = 'FAIL'
 
     print('=== DealPilotAI config report ===')
-    print(f'  profile: {"offline-demo" if demo_mode else "sandbox-ready"}')
+    print(f'  profile: {"offline-demo" if demo_mode else "configured-sandbox"}')
     print(f'  AI_PROVIDER: {provider or "(unset)"}')
     for w in WARNINGS:
         print(f'  WARN  {w}')

@@ -1,0 +1,26 @@
+[
+  {
+    "profile": "offline",
+    "fallback": true,
+    "provider": "deterministic-fallback",
+    "rendered_items": 4,
+    "cart_total": "24.99 USD",
+    "payment_gateway": "disabled",
+    "viewports": [
+      1440,
+      768,
+      390
+    ]
+  },
+  {
+    "profile": "live-ai",
+    "fallback": false,
+    "provider": "featherless",
+    "rendered_items": 2,
+    "cart_total": "24.99 USD",
+    "payment_gateway": "disabled",
+    "viewports": [
+      1440
+    ]
+  }
+]

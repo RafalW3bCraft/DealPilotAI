@@ -22,7 +22,7 @@
               <td><span class="dp-cart-item-title">{{ it.title }}</span><span class="dp-cart-item-sku">{{ it.sku }}</span></td>
               <td><input type="hidden" name="sel" value="{{ it.sku }}" data-sku="{{ it.sku }}">
                 <label class="dp-visually-hidden" for="qty-{{ loop.index }}">Quantity for {{ it.title }}</label>
-                <input class="dp-cart-quantity" id="qty-{{ loop.index }}" type="number" name="qty_{{ it.sku }}" min="1" max="10" value="{{ it.quantity }}" required {% if not checkout_enabled|default(true) %}disabled{% endif %}></td>
+                <input class="dp-cart-quantity" id="qty-{{ loop.index }}" type="number" name="qty_{{ it.sku }}" min="1" max="10" value="{{ it.quantity }}" required {% if not cart_enabled|default(true) %}disabled{% endif %}></td>
               <td>{{ it.unit_price }} {{ quote.currency }}</td>
               <td><strong>{{ it.line_total }} {{ quote.currency }}</strong></td>
             </tr>
@@ -30,7 +30,7 @@
           </tbody>
         </table>
       </div>
-      <div class="dp-cart-update"><button type="submit" class="dp-btn dp-btn-secondary" {% if not checkout_enabled|default(true) %}disabled{% endif %}>Update cart total</button><p id="dp-quote-msg" class="dp-form-message" role="status" aria-live="polite">Edit quantities, then update your total before checkout.</p></div>
+      <div class="dp-cart-update"><button type="submit" class="dp-btn dp-btn-secondary" {% if not cart_enabled|default(true) %}disabled{% endif %}>Update cart total</button><p id="dp-quote-msg" class="dp-form-message" role="status" aria-live="polite">Edit quantities, then update your total before checkout.</p></div>
       </form>
     </section>
 

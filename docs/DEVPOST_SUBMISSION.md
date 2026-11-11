@@ -1,78 +1,49 @@
-# Devpost Submission Draft
+# Devpost submission draft
 
-**Status:** Draft only. Do not submit until the live AI, sandbox capture, public demo, and required links are verified. No hosted URL or YouTube URL is being invented here.
+## Title and tagline
 
-## Project title
+**DealPilotAI** — Find the right products. Approve the payment yourself.
 
-DealPilotAI — Conversational Commerce with Verified PayPal Checkout
+## Problem and audience
 
-## Tagline
+Shoppers describe a need in natural language, but still have to translate it into product selections and a trustworthy checkout. Small merchants need discovery that uses their actual catalog without handing financial authority to a model.
 
-An AI shopping assistant that turns natural-language product discovery into secure, human-approved PayPal payments.
+## What it does
 
-## The problem
+DealPilotAI connects a Flask storefront, catalog-grounded AI recommendations, a server-priced cart and PayPal Orders v2 sandbox checkout. A shopper asks for products and a budget, reviews the recommendations, chooses quantities and approves payment directly at PayPal. The server validates the capture before displaying a successful receipt. Amazon affiliate referrals remain a separate optional lane.
 
-Online discovery and checkout can be disconnected, and shoppers may have difficulty comparing products against a budget. A trustworthy assistant must use an authorized product source, preserve actual merchant prices, and keep the shopper in control of payment.
+## AI and PayPal
 
-## Target customers
+The verified Featherless model is Qwen/Qwen3.8-27B. It selects/ranks catalog SKUs and proposes quantities. Server code validates typed JSON, current catalog facts, availability and the total budget, then renders commercial facts in English or Hindi. Deterministic fallback is visibly labeled. Live release scenarios passed without fallback; the server, not the model, controls every payment action.
 
-The prototype is aimed at shoppers who want conversational product discovery and small merchants who need a controlled catalog-to-checkout experience. The separate affiliate lane is for deal publishers using Telegram and Amazon referral links.
+PayPal integration uses sandbox OAuth, Orders creation, buyer approval, capture verification, durable records, idempotency and reconciliation. Webhook code verifies signatures and uses a durable retry inbox. Real order creation is verified; buyer-approved capture and genuine signed webhook evidence must still be completed before submission claims are finalized.
 
-## What DealPilotAI does
+## Implementation and innovation
 
-DealPilotAI provides a conversational interface over a merchant-owned catalog, creates server-priced cart quotes, and integrates with PayPal Orders v2 in sandbox mode. The shopper must explicitly approve the PayPal transaction. A separate legacy affiliate lane can send shoppers to Amazon; those referrals are not PayPal orders and are not part of the merchant checkout catalog.
+Flask/Jinja, Python, Pydantic, SQLAlchemy, SQLite/PostgreSQL, Featherless/OpenAI-compatible inference, PayPal Orders v2 and Playwright. The central design separates probabilistic product selection from deterministic pricing and human-controlled payment approval. Atomic capture finalization and explicit ambiguity recovery protect interrupted checkout workflows.
 
-## Core features
+## Hackathon work and impact
 
-- Merchant catalog with server-authoritative products, SKUs, prices, currencies, and availability.
-- AI service with a Pydantic response schema, catalog grounding, and deterministic offline fallback clearly marked as non-AI.
-- Cart quoting with decimal arithmetic, limits, and expiration.
-- Sandbox-only PayPal Orders v2 integration with request idempotency, capture reconciliation, durable payment storage, and webhook verification/retry code.
-- Flask buyer and merchant routes.
-- Separate Telegram/Amazon affiliate functionality.
+The pre-existing Telegram affiliate project gained a merchant commerce domain, AI shopping workflow and PayPal integration in commits dated October 31–November 1, 2026; subsequent November work repaired validation, state, security and UX. See HACKATHON_CHANGELOG.md and actual Git history. The intended impact is a clearer discovery-to-checkout workflow for small merchants. No measured conversion, revenue or market-share improvement is claimed.
 
-## How AI is used
+## Evidence and links
 
-The AIShoppingService sends the shopper's request and catalog context to an explicitly configured OpenAI-compatible provider. The service validates structured output, drops unknown SKUs, corrects prices from the merchant catalog, and never authorizes or captures payment. The last attempted live configuration was Featherless with `Qwen/Qwen3.8-27B`; it returned no usable output, so a successful real inference has not been demonstrated. When inference is unavailable, the deterministic fallback is labeled as such.
+Repository: https://github.com/RafalW3bCraft/DealPilotAI . MIT license included. Local setup: README.md. Test and integration evidence: docs/release. AI-assisted engineering used OpenAI Codex, ECC review guidance and independent review agents. Product illustrations are repository-native SVG; demo listing copy is identified as authored demo content.
 
-## How PayPal is used
+Public YouTube video: **not yet supplied**. Hosted demo: not planned; local judge setup is provided. No actual Devpost submission is claimed.
 
-The application uses PayPal Orders v2 in sandbox only. It creates an order from a server-calculated quote, redirects the shopper to PayPal for human approval, and captures only after approval. Webhook code verifies signatures and reconciles events with authoritative order state. Sandbox OAuth was verified, but a buyer-approved completed capture has not yet been evidenced. Do not claim a completed payment until `PAYPAL_SANDBOX_EVIDENCE.md` contains current order and capture proof.
+## Compliance checklist
 
-## Technical architecture
+Official source: https://paypalaihackathon.devpost.com/rules . Deadline: November 12, 2026, 3:00 PM Eastern. Access must remain available through the judging period ending December 15, 2026.
 
-Python 3.11+ application; Flask web routes; Pydantic AI schemas; merchant catalog/cart/checkout domain; SQLAlchemy durable commerce storage; PayPal sandbox Orders v2 via `httpx`; legacy Telegram and Amazon referral modules. The commerce and affiliate lanes are distinct.
-
-## How it was built
-
-The existing Telegram/Amazon application was extended with the merchant catalog, AI shopping service, quote/cart layer, payment state machine, PayPal client, durable storage, buyer/merchant pages, and webhook recovery. Existing modules were preserved rather than replaced. The current repository includes regression tests and an offline catalog mode.
-
-## Challenges and achievements
-
-Key engineering challenges include keeping AI output subordinate to catalog truth, making checkout idempotent under retries, refusing live PayPal configuration, preserving payment records durably, and verifying webhook deliveries before reconciliation. Automated local tests pass, but genuine AI inference and a buyer-approved sandbox capture remain release blockers and must not be presented as completed achievements.
-
-## Testing and verification
-
-Current local test report: 152 passed, 0 failed, 0 skipped; 76% targeted coverage, installed and run in a fresh Python 3.14.2 virtual environment. Genuine local offline-mode landing and shop screenshots are available in the README. A mocked desktop/mobile Playwright journey passes and covers merchant browser sign-in, checkout replay recovery UX, and safe rendering of malicious AI text. The last real AI smoke failed and used fallback; the historical PayPal sandbox OAuth probe is read-only and no buyer-approved capture, real signed webhook, or successful GitHub Actions run on this uncommitted source is verified. See `docs/release/` for the evidence and exact blockers.
-
-## Hackathon-period changes
-
-See [HACKATHON_CHANGELOG.md](../HACKATHON_CHANGELOG.md). The latest local worktree changes are not committed or published, and must not be described as merged.
-
-## Future development
-
-Complete live provider and sandbox verification, browser coverage, recurring webhook retry scheduling, improve accessibility and responsive testing, and complete operational/security controls before any production evaluation.
-
-## Demo and links
-
-- Repository: https://github.com/RafalW3bCraft/DealPilotAI
-- Hosted demo: not currently available.
-- Public YouTube demo: not uploaded; URL unavailable.
-- Local offline-mode screenshots: [landing page](screenshots/landing-local-offline.png), [shop](screenshots/shop-local-offline.png). These are UI screenshots, not live inference or payment evidence.
-- Recording instructions: [demo runbook](DEMO_RUNBOOK.md); a real provider response and buyer-approved sandbox capture are still required before recording the corresponding claims.
-- Hackathon: https://paypalaihackathon.devpost.com/
-- Rules: https://paypalaihackathon.devpost.com/rules
-
-## Known limitations and disclosure
-
-The live AI provider/model is not verified, sandbox OAuth is not a capture, live signed webhook delivery is not verified, and the project is not production-ready. Amazon affiliate discovery routes to Amazon, while PayPal applies only to the separate merchant-authorized catalog. No sponsor integration other than the implemented PayPal sandbox Orders v2 integration is claimed.
+| Requirement | State | Evidence / action |
+|---|---|---|
+| Meaningful PayPal sandbox + genuine AI | BLOCKED | AI passed; finish buyer-approved capture and end-to-end recording |
+| Significant changes during submission period | PASS | Dated commerce/AI/PayPal commits and changelog; organizer decides eligibility |
+| Public code + open-source license | BLOCKED | Existing public repository and MIT LICENSE; current repair candidate still requires owner publication |
+| Working build and complete source/assets | BLOCKED | Local setup/test artifacts present; complete full integration access gate |
+| English text/testing instructions | PASS | This draft, README and demo runbook |
+| Demonstration footage / public YouTube under 3 minutes | BLOCKED | 170-second script and local rehearsal; actual full-flow video/upload pending |
+| Free judge access through December 15 | BLOCKED | Local offline setup works; complete free integration access unresolved |
+| Entrant eligibility, ownership and third-party rights | BLOCKED | Entrant must confirm personal/team eligibility and rights; not inferred from code |
+| Submission form and final URLs | BLOCKED | Owner review and authorized submission required |

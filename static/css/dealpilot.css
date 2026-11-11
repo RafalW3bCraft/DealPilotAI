@@ -1,7 +1,7 @@
 :root {
   color-scheme: light;
   --dp-ink: #162033;
-  --dp-muted: #68758a;
+  --dp-muted: #5d6b80;
   --dp-paper: #f6f7fb;
   --dp-surface: #fff;
   --dp-line: #e4e8f0;
@@ -33,7 +33,8 @@ a { color: var(--dp-primary); text-underline-offset: .2em; }
 a:hover { color: var(--dp-primary-dark); }
 button, input { font: inherit; }
 button:focus-visible, input:focus-visible, a:focus-visible {
-  outline: 3px solid #efb93f;
+  outline: 3px solid #162033;
+  box-shadow: 0 0 0 6px #fff;
   outline-offset: 3px;
 }
 
@@ -304,7 +305,7 @@ button:focus-visible, input:focus-visible, a:focus-visible {
   color: var(--dp-ink);
   padding: .72rem .9rem;
 }
-.dp-assistant-form input::placeholder { color: #8791a3; }
+.dp-assistant-form input::placeholder { color: #5f6b7d; }
 .dp-assistant-hint { margin: .7rem 0 0; color: var(--dp-muted); font-size: .78rem; }
 .dp-ai-results { display: grid; gap: .7rem; margin-top: 1rem; }
 .dp-ai-results:empty { display: none; }
@@ -384,7 +385,7 @@ button:focus-visible, input:focus-visible, a:focus-visible {
   line-height: 1.35;
   text-transform: uppercase;
 }
-.dp-card-sku { color: #929bad; font-size: .65rem; font-weight: 650; }
+.dp-card-sku { color: #5f6b7d; font-size: .65rem; font-weight: 650; }
 .dp-card-title { margin: 0; font-size: 1.03rem; font-weight: 740; letter-spacing: -.025em; line-height: 1.3; }
 .dp-card-desc { min-height: 2.6em; margin: .35rem 0 .8rem; color: var(--dp-muted); font-size: .82rem; line-height: 1.45; }
 .dp-card-purchase { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
@@ -404,7 +405,7 @@ button:focus-visible, input:focus-visible, a:focus-visible {
 .dp-page-heading { margin-bottom: 1.35rem; }
 .dp-page-heading h1 { margin: 0; font-size: clamp(2rem, 4vw, 2.8rem); font-weight: 770; letter-spacing: -.055em; line-height: 1.1; }
 .dp-muted { margin: .4rem 0 0; color: var(--dp-muted); }
-.dp-breadcrumbs { display: flex; align-items: center; gap: .6rem; margin: 0 0 1.25rem; color: #9aa2b1; font-size: .8rem; }
+.dp-breadcrumbs { display: flex; align-items: center; gap: .6rem; margin: 0 0 1.25rem; color: #5f6b7d; font-size: .8rem; }
 .dp-breadcrumbs a { color: #657187; text-decoration: none; }
 .dp-breadcrumbs [aria-current] { color: var(--dp-ink); font-weight: 650; }
 
@@ -416,7 +417,7 @@ button:focus-visible, input:focus-visible, a:focus-visible {
 .dp-panel-heading a { font-size: .82rem; font-weight: 650; text-decoration: none; }
 .dp-table-scroll { width: 100%; overflow-x: auto; }
 .dp-table { width: 100%; border-collapse: collapse; font-size: .84rem; text-align: left; }
-.dp-table th { color: #7a8598; font-size: .7rem; font-weight: 730; letter-spacing: .055em; text-transform: uppercase; }
+.dp-table th { color: #5f6b7d; font-size: .7rem; font-weight: 730; letter-spacing: .055em; text-transform: uppercase; }
 .dp-table th, .dp-table td { border-bottom: 1px solid #edf0f5; padding: .85rem .65rem; vertical-align: middle; }
 .dp-table th:first-child, .dp-table td:first-child { padding-left: .1rem; }
 .dp-table tbody tr:last-child td { border-bottom: 0; }
@@ -424,7 +425,7 @@ button:focus-visible, input:focus-visible, a:focus-visible {
 .dp-table td strong { color: var(--dp-ink); }
 .dp-cart-item-title, .dp-cart-item-sku { display: block; }
 .dp-cart-item-title { color: var(--dp-ink); font-weight: 690; }
-.dp-cart-item-sku { margin-top: .18rem; color: #919aaa; font-size: .69rem; }
+.dp-cart-item-sku { margin-top: .18rem; color: #5f6b7d; font-size: .69rem; }
 .dp-order-summary h2 { margin: 0 0 1.1rem; font-size: 1.1rem; }
 .dp-summary-merchant, .dp-summary-total { display: flex; justify-content: space-between; gap: 1rem; margin: 0; padding: .8rem 0; border-bottom: 1px solid #edf0f5; font-size: .83rem; }
 .dp-summary-merchant span { color: var(--dp-muted); }
@@ -469,7 +470,7 @@ button:focus-visible, input:focus-visible, a:focus-visible {
 .dp-metric-card { display: flex; min-width: 0; flex-direction: column; border: 1px solid var(--dp-line); border-radius: 1rem; background: #fff; padding: 1.15rem; }
 .dp-metric-card > span { color: var(--dp-muted); font-size: .75rem; font-weight: 650; }
 .dp-metric-card strong { margin: .35rem 0; font-size: clamp(1.25rem, 3vw, 1.8rem); letter-spacing: -.045em; overflow-wrap: anywhere; }
-.dp-metric-card small { color: #929bad; font-size: .72rem; }
+.dp-metric-card small { color: #5f6b7d; font-size: .72rem; }
 .dp-dashboard-panel { margin-top: 1rem; }
 .dp-dashboard-panel .dp-panel-heading { align-items: end; }
 .dp-dashboard-panel .dp-eyebrow { margin-bottom: .25rem; }
@@ -488,7 +489,7 @@ button:focus-visible, input:focus-visible, a:focus-visible {
 .dp-value-grid h2 { margin: .65rem 0 .25rem; font-size: 1.04rem; letter-spacing: -.025em; }
 .dp-value-grid p { margin: 0; color: var(--dp-muted); font-size: .84rem; }
 .dp-footer { border-top: 1px solid var(--dp-line); background: #fff; }
-.dp-footer-inner { display: flex; width: min(1200px, calc(100% - 3rem)); min-height: 72px; align-items: center; justify-content: space-between; gap: 1rem; margin: 0 auto; color: #7d8798; font-size: .74rem; }
+.dp-footer-inner { display: flex; width: min(1200px, calc(100% - 3rem)); min-height: 72px; align-items: center; justify-content: space-between; gap: 1rem; margin: 0 auto; color: #5f6b7d; font-size: .74rem; }
 .dp-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
 
 @media (min-width: 1100px) {
@@ -564,7 +565,8 @@ button:focus-visible, input:focus-visible, a:focus-visible {
 }
 
 /* Product sketches are decorative; their catalog names carry the accessible label. */
-.dp-product-illustration { width: 85%; max-width: 180px; height: 110px; color: #4137a8; }
+.dp-card-art { align-items: center; justify-content: center; }
+.dp-product-illustration { position: relative; z-index: 1; width: 85%; max-width: 180px; height: 110px; color: #4137a8; }
 .dp-cart-quantity { width: 4.5rem; padding: .35rem; border: 1px solid #9aa5b6; border-radius: .4rem; }
 .dp-cart-update { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; padding-top: 1rem; }
 .dp-cart-update .dp-form-message { flex: 1 1 180px; margin: 0; }

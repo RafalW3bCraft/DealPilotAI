@@ -68,12 +68,13 @@ def build_client(client_kwargs: dict) -> Any:
     return openai.OpenAI(**client_kwargs)
 
 
-def complete(client: Any, model: str, messages: list[dict]) -> str | None:
-    """One JSON-mode chat completion. Returns the raw content string."""
+def complete(client: Any, model: str, messages: list[dict], response_format='json_object') -> str | None:
+    """Prompt JSON for incompatible gateways; all outputs still require validation."""
+    options = {'response_format': {'type': 'json_object'}} if response_format == 'json_object' else {}
     response = client.chat.completions.create(
         model=model,
         messages=messages,
-        response_format={"type": "json_object"},
         temperature=0.2,
+        **options,
     )
     return response.choices[0].message.content

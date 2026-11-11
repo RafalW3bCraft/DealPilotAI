@@ -27,10 +27,6 @@ from ai.providers import select_provider
 
 logger = logging.getLogger(__name__)
 
-_OPENAI_DEFAULT_MODEL = "gpt-4o-mini"
-_FEATHERLESS_DEFAULT_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct"
-_FEATHERLESS_BASE_URL = "https://api.featherless.ai/v1"
-
 _PRICE_RE = re.compile(r"\$\s?(\d+(?:\.\d{1,2})?)")
 _URGENCY_RE = re.compile(
     r"(only\s+\d+\s+left|\d+\s+in\s+stock|selling\s+fast|almost\s+gone|hurry)",
@@ -113,6 +109,10 @@ class AIShoppingService:
             return
 
         selection = select_provider(config)
+        response_format = _getattr(config, 'AI_RESPONSE_FORMAT', 'auto')
+        if response_format not in {'auto', 'json_object', 'prompt'}:
+            raise ValueError('AI_RESPONSE_FORMAT must be auto, json_object, or prompt')
+        self.response_format = ('json_object' if selection['name'] == 'openai' else 'prompt') if response_format == 'auto' else response_format
         if selection["name"]:
             self._client = type(self)._build_openai_client(**selection["client_kwargs"])
             self.provider_name = selection["name"]
@@ -121,11 +121,8 @@ class AIShoppingService:
 
     @staticmethod
     def _build_openai_client(**kwargs: Any) -> Any:
-        try:
-            import openai  # deferred: only needed when a provider is used
-        except ImportError as exc:  # pragma: no cover
-            raise RuntimeError("openai SDK required for provider-backed mode") from exc
-        return openai.OpenAI(**kwargs)
+        from ai.providers import build_client
+        return build_client(kwargs)
 
     # -- public API ------------------------------------------------------
 
@@ -209,13 +206,8 @@ class AIShoppingService:
     def _call_provider(self, messages: list[dict]) -> str:
         if self._provider_callable is not None:
             return self._provider_callable(messages)
-        response = self._client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            response_format={"type": "json_object"},
-            temperature=0.2,
-        )
-        return response.choices[0].message.content or ""
+        from ai.providers import complete
+        return complete(self._client, self.model, messages, self.response_format) or ''
 
     # -- grounding ---------------------------------------------------------
 

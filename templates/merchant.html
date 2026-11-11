@@ -4,14 +4,14 @@
 <main class="dp-page dp-merchant-page" id="main-content">
   <div class="dp-page-heading dp-merchant-heading">
     <div><p class="dp-eyebrow">MERCHANT PORTAL</p><h1>Merchant dashboard</h1><p class="dp-muted">A clear view of your catalog activity and sandbox orders.</p></div>
-    {% if not demo_mode %}
+    {% if not merchant_demo_open %}
     <form method="post" action="{{ url_for('commerce.merchant_logout') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button class="dp-btn dp-btn-secondary" type="submit">Sign out</button>
     </form>
     {% endif %}
   </div>
-  {% if demo_mode %}
+  {% if merchant_demo_open %}
   <p class="dp-alert dp-alert-warn" role="note">Demo mode · This dashboard is open for local preview and is not protected for public hosting.</p>
   {% endif %}
   <p class="dp-safe-note">{{ sandbox_note }} {{ fulfillment }}</p>
@@ -37,7 +37,17 @@
       <caption class="dp-visually-hidden">Recent sandbox orders</caption>
       <thead><tr><th scope="col">Order</th><th scope="col">Status</th><th scope="col">Amount</th><th scope="col">Capture</th><th scope="col">Created</th></tr></thead>
       <tbody>{% for o in orders %}
-        <tr><td>{{ o.masked_id }}</td><td><span class="dp-badge">{{ o.status_label }}</span></td><td>{{ o.amount }} {{ o.currency }}</td><td>{{ o.capture_id or '—' }}</td><td>{{ o.created_at }}</td></tr>
+        <tr><td>{{ o.masked_id }}</td><td><span class="dp-badge">{{ o.status_label }}</span>
+          {% if o.requires_review %}<p class="dp-alert dp-alert-warn" role="alert">Verified funds conflict with this order state. Reconcile in PayPal; do not fulfill or retry payment until reviewed.</p>{% endif %}
+          {% if o.recovery_needed %}
+          <details><summary>Recover an uncertain order</summary>
+            <p>Find the original order in your PayPal sandbox account. Do not create another payment. Its quote, amount and attempt reference will be verified before linking.</p>
+            <form method="post" action="{{ url_for('commerce.merchant_recover_order', attempt_id=o.attempt_id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <label>Original PayPal order ID <input name="paypal_order_id" required maxlength="64" pattern="[A-Za-z0-9]+"></label>
+              <button class="dp-btn dp-btn-secondary" type="submit">Verify and recover</button>
+            </form>
+          </details>{% endif %}</td><td>{{ o.amount }} {{ o.currency }}</td><td>{{ o.capture_id or '—' }}</td><td>{{ o.created_at }}</td></tr>
       {% else %}<tr><td colspan="5">No orders yet. Completed sandbox captures will appear here.</td></tr>{% endfor %}</tbody>
     </table></div>
   </section>

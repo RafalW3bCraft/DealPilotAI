@@ -197,7 +197,10 @@ class DealBotApplication:
 
     
     async def post_deals(self) -> int:
-        
+        from core.affiliate_policy import scraping_allowed
+        if not scraping_allowed(self.config):
+            logger.info('Amazon scraping is disabled by policy')
+            return 0
         if not self.bot:
             logger.warning("⚠️ No bot available for posting deals")
             return 0
@@ -207,7 +210,7 @@ class DealBotApplication:
             
             # Get new deals from scraper
             scraper = DealScraper(
-                max_deals_per_source=self.config.MAX_DEALS_PER_SOURCE
+                max_deals_per_source=self.config.MAX_DEALS_PER_SOURCE, config=self.config
             )
             await scraper.initialize()
             

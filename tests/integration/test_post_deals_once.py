@@ -113,6 +113,8 @@ def test_post_deals_runs_pipeline_exactly_once(monkeypatch):
     app = main.DealBotApplication.__new__(main.DealBotApplication)
 
     minimal_config = SimpleNamespace(
+        ENABLE_EXTERNAL_AFFILIATE=True,
+        DISABLE_UNVERIFIED_AMAZON_SCRAPING=False,
         MAX_DEALS_PER_SOURCE=5,
         AMAZON_AFFILIATE_ID="testaffiliate-20",
         OPENAI_API_KEY="",

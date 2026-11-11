@@ -1,43 +1,23 @@
-# DealPilotAI Demo Runbook
+# 170-second demonstration and recording runbook
 
-**Target recording length:** 170 seconds (within the 165-175 second requirement).
-**Status:** Preparation only; do not record a fake AI result or payment. The live provider and buyer-approved capture gates are currently blocked.
+## Prepare
 
-## Before recording
+Install the pinned environment, use private rotated keys, set the callback origin, start `python scripts/run_web.py`, and run the live AI checks. Use a sandbox merchant and a separate sandbox personal buyer. Keep password entry, tokens, emails and account details off-screen. Do not replace a failed live integration with a fixture while calling it real.
 
-- Rotate credentials exposed in local output and configure fresh sandbox-only values privately.
-- Run `python scripts/ai_smoke.py` and the AI release smoke; confirm `fallback=false` and save sanitized evidence.
-- Run the full PayPal sandbox buyer journey and confirm a completed capture, receipt after restart, and merchant dashboard entry.
-- Confirm webhooks and recurring retry are working or explicitly disclose any gap.
-- Use a real local/hosted app and actual sandbox buyer approval. Never edit states, substitute fixtures, or display a mock capture as real.
-- Close terminals, environment files, secret managers, and browser tabs that could reveal credentials. Use a fresh browser profile with no private data.
-- Capture current desktop app screens; test mobile layout separately. Record the real URLs only if a hosted environment exists.
-- Prepare sandbox buyer login in advance without recording the password; pause the recording if interactive approval takes longer than the segment.
+The local `docs/demo/live-ai-cart-rehearsal.webm` records genuine AI-to-cart behavior with payment deliberately disabled. It is rehearsal footage, not the final complete transaction video. Screenshots and integration JSON contain the current independently observed evidence.
 
-## 170-second shot list and voiceover
-
-| Time | On-screen action | Voiceover |
+| Time | Screen / action | Narration |
 |---|---|---|
-| 0-15s | Show the real DealPilotAI shop and project name. | "Finding the right product and checking out are usually separate tasks. DealPilotAI connects conversational discovery to a merchant-owned catalog and keeps payment approval in the shopper's hands." |
-| 15-40s | Submit a natural English shopping request in the actual app. Show the real provider/model evidence only if the live result passed. | "I can describe what I need in plain language. The assistant uses a configured model, but every recommendation is checked against the merchant catalog. If inference is unavailable, the app labels its deterministic fallback instead of pretending it is AI." |
-| 40-65s | Inspect grounded products and prices, then add a recommendation to cart. | "These SKUs and prices come from the server catalog. The model cannot invent an item, change its price, or issue a payment. The cart total is calculated on the server." |
-| 65-110s | Start checkout, show the real PayPal sandbox approval page, approve as the sandbox buyer, and wait for the real return/capture. | "Checkout creates a PayPal sandbox order from the server quote. I review and approve it on PayPal. Only after that explicit approval does the application request capture." |
-| 110-135s | Show actual receipt/capture details and merchant dashboard, then restart and retrieve the same receipt if prepared. | "The receipt reflects the authoritative capture result and is stored for later retrieval. The merchant view reads the same persisted order. This recording uses the actual sandbox transaction, not a fixture." |
-| 135-155s | Show a small code or architecture view for catalog grounding, state machine, and webhook verification. Do not expose secrets. | "AI and payment are separate trust boundaries. Idempotency and reconciliation protect retries, and webhook events must be verified and checked against PayPal's order state before they can change payment status." |
-| 155-170s | Return to the app and show technologies/summary. | "DealPilotAI combines Flask, a grounded AI shopping service, durable commerce storage, and PayPal Orders v2 sandbox checkout. Amazon affiliate discovery remains a separate referral path. This is a sandbox demonstration, not production payment processing." |
+| 0–15s | Storefront and target shopper need | “DealPilotAI connects a natural-language shopping request to a merchant catalog and a checkout the shopper controls.” |
+| 15–40s | Submit a real lamp/organizer request; show actual live recommendations | “The AI selects catalog products. The server checks each SKU, price, availability and the whole cart budget. Fallback is labeled when inference is unavailable.” |
+| 40–65s | Select recommendations, edit quantity and review server quote | “These prices come from the merchant catalog. Changing quantities creates a new server quote; the model cannot invent a charge.” |
+| 65–110s | Follow genuine PayPal sandbox approval and approve as buyer | “PayPal receives the verified quote. I review and approve the sandbox payment myself. Only then can the application capture it.” |
+| 110–135s | Actual completed receipt, capture ID and restart retrieval | “The receipt shows the verified capture and persisted amount. This is the same transaction after reopening the application.” |
+| 135–155s | Merchant dashboard and compact architecture | “The merchant sees the durable record. Atomic finalization, idempotency, signature verification and reconciliation protect retries.” |
+| 155–170s | Technologies, separate affiliate path and sandbox statement | “Flask, grounded AI and PayPal Orders v2 provide a controlled commerce demonstration. Amazon referrals are separate. This is sandbox software, with no real charges or physical shipping.” |
 
-## Exact recording checklist
+## Required recording gates
 
-- [ ] All live evidence gates required for claims passed on the candidate build.
-- [ ] The actual app is visible and responsive; no static mockup is substituted.
-- [ ] Natural-language request and recommendations are genuine provider output with `fallback=false`.
-- [ ] Prices/SKUs match the real merchant catalog.
-- [ ] PayPal page is sandbox, with no passwords or account details visible.
-- [ ] A real buyer-approved capture completes; receipt and merchant dashboard match it.
-- [ ] Restart/recovery is shown only if performed in the recording session.
-- [ ] No credential, bearer token, webhook signature, email, or buyer PII appears.
-- [ ] Video is 165-175 seconds and under the Devpost three-minute limit.
-- [ ] Upload to the owner's YouTube account as appropriate and verify public/unlisted playback before documenting the URL.
-- [ ] Record actual repository, hosted demo, YouTube, and Devpost URLs; never invent links.
+Use the capture and restart narration only after those actions are executed. Use the webhook claim as an implemented safeguard until genuine signed delivery is evidenced. Complete buyer approval in advance of recording if login takes too long; never expose the password. Show the actual final app, not screenshots standing in for interaction.
 
-**Manual action still required:** a human must approve the PayPal sandbox order and the project owner must perform the YouTube upload/Devpost submission. No video or hosted URL exists yet.
+The owner must record the full verified flow, make a YouTube upload publicly visible, verify playback and duration below three minutes, add the real URL to Devpost, and submit before November 12, 2026, 3:00 PM Eastern. No upload or submission has been performed. A locally reproducible project is the selected judge-access path; no hosting deployment is planned.

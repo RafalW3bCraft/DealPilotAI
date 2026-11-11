@@ -22,3 +22,5 @@ htmlcov/
 playwright-report/
 test-results/
 .hmem/
+
+.config/.semgrep/

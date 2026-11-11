@@ -41,7 +41,7 @@ def assert_checkout_allowed(config) -> None:
     PayPal capture. Raising here (rather than silently succeeding) is the
     tripwire that prevents a demo build from pretending money moved.
     """
-    if getattr(config, "DEMO_MODE", False) and not getattr(
+    if not getattr(
         config, "ENABLE_MERCHANT_CHECKOUT", True
     ):
         raise RuntimeError(

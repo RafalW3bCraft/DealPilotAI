@@ -61,7 +61,8 @@ class AffiliateBot:
         
         self.scraper = DealScraper(
             max_deals_per_source=self.config.MAX_DEALS_PER_SOURCE,
-            request_timeout=self.config.REQUEST_TIMEOUT
+            request_timeout=self.config.REQUEST_TIMEOUT,
+            config=self.config
         )
         
         self._register_handlers()
@@ -334,6 +335,10 @@ Need help? Just ask!"""
         await self._get_category_deals(message, "books", "📚")
     
     async def cmd_search(self, message):
+        from core.affiliate_policy import scraping_allowed
+        if not scraping_allowed(self.config):
+            await message.answer('Amazon search is disabled. Use the merchant shop for sandbox shopping.')
+            return
         """Search for products by keyword."""
         try:
             # Extract keyword from message
@@ -540,6 +545,10 @@ Select your preferred Amazon marketplace to get deals with correct pricing and l
         await message.answer(admin_text, reply_markup=keyboard, parse_mode="Markdown")
     
     async def cmd_add_deal(self, message):
+        from core.affiliate_policy import scraping_allowed
+        if not scraping_allowed(self.config):
+            await message.answer('Adding scraped Amazon deals is disabled by policy.')
+            return
         # Extract URL from message
         text_parts = message.text.split(maxsplit=1)
         if len(text_parts) < 2:
@@ -728,6 +737,10 @@ Select your preferred Amazon marketplace to get deals with correct pricing and l
     # Utility methods
     
     async def post_deals(self) -> int:
+        from core.affiliate_policy import scraping_allowed
+        if not scraping_allowed(self.config):
+            logger.info('Amazon scraping is disabled by policy')
+            return 0
         try:
             # Get new deals from scraper
             deals = await self.scraper.scrape_real_amazon_deals()

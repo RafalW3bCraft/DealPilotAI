@@ -280,7 +280,7 @@
       postJson('/checkout/start', { quote_id: quoteId })
         .then(function (result) {
           var orderUrl = sameOriginOrderUrl(result.body.order_url);
-          if (orderUrl && (result.status === 202 || ['PAID', 'FAILED', 'CANCELED'].indexOf(result.body.status) !== -1)) {
+          if (orderUrl && (result.status === 202 || ['PAID', 'FAILED', 'CANCELED', 'REQUIRES_REVIEW'].indexOf(result.body.status) !== -1)) {
             window.location.assign(orderUrl);
             return;
           }
@@ -332,8 +332,13 @@
           return response.json();
         })
         .then(function (order) {
-          if (order.status && order.status !== orderPanel.dataset.status) {
+          if ((order.status && order.status !== orderPanel.dataset.status) ||
+              Boolean(order.requires_review || order.status === 'REQUIRES_REVIEW') !== (orderPanel.dataset.requiresReview === 'true')) {
             window.location.reload();
+            return;
+          }
+          if (order.requires_review || order.status === 'REQUIRES_REVIEW') {
+            setMessage(orderMessage, 'Payment needs merchant review. Keep this reference and contact the merchant before attempting another payment.', 'pending');
             return;
           }
           if (finalStates.indexOf(order.status) !== -1) {
@@ -347,11 +352,11 @@
             setMessage(orderMessage, 'Confirmation is taking longer. Automatic checks have paused. Keep this order link and use Refresh order status, or contact the merchant. Do not start another payment.', 'pending');
           }
         })
-        .catch(function (error) { setMessage(orderMessage, error.message || 'Unable to check your order. Try refreshing its status.', 'error'); })
+        .catch(function () { setMessage(orderMessage, 'Could not check your order. Keep this page link and try Refresh order status again.', 'error'); })
         .then(function () { requestPending = false; setBusy(refreshButton, false); });
     };
     refreshButton.addEventListener('click', refreshOrder);
-    if (finalStates.indexOf(orderPanel.dataset.status) === -1) { pollTimer = window.setTimeout(refreshOrder, 2000); }
+    if (finalStates.indexOf(orderPanel.dataset.status) === -1 && orderPanel.dataset.requiresReview !== 'true') { pollTimer = window.setTimeout(refreshOrder, 2000); }
     window.addEventListener('pagehide', function () { window.clearTimeout(pollTimer); });
   }
 

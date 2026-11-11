@@ -1,0 +1,14 @@
+{
+  "timestamp_utc": "2026-11-11T17:14:44.002309+00:00",
+  "environment": "sandbox",
+  "source_head": "23f23d0bfbd26c638adb973ba9a7d937ecba89d5",
+  "tracked_diff_sha256": "9e1effdecc680775736a576e04e9149d1be1ec2fd2990b53736c94fd6d6a62a3",
+  "attempt_id": 1,
+  "order_id": "9MG566568H183664A",
+  "status": "AWAITING_BUYER_APPROVAL",
+  "amount": "24.99",
+  "currency": "USD",
+  "gate": "BLOCKED",
+  "reason": "buyer has not approved the sandbox order",
+  "approval_state": "PAYER_ACTION_REQUIRED"
+}

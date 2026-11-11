@@ -1,0 +1,68 @@
+[
+  {
+    "scope": "working-source",
+    "exit_code": 0,
+    "findings": [
+      {
+        "detector": "URI",
+        "file": "tests/commerce/test_release_repairs.py",
+        "line": 105,
+        "classification": "negative_url_test_fixture"
+      },
+      {
+        "detector": "URI",
+        "file": "tests/commerce/test_release_repairs.py",
+        "line": 71,
+        "classification": "negative_url_test_fixture"
+      }
+    ]
+  },
+  {
+    "scope": "git-history",
+    "exit_code": 0,
+    "findings": [
+      {
+        "detector": "URI",
+        "file": "tests/commerce/test_release_repairs.py",
+        "line": 72,
+        "classification": "negative_url_test_fixture"
+      },
+      {
+        "detector": "Postgres",
+        "file": ".env.example",
+        "line": 41,
+        "classification": "documented_placeholder_or_test"
+      },
+      {
+        "detector": "Postgres",
+        "file": ".env.example",
+        "line": 23,
+        "classification": "documented_placeholder_or_test"
+      },
+      {
+        "detector": "Postgres",
+        "file": "README.md",
+        "line": 1,
+        "classification": "documented_placeholder_or_test"
+      },
+      {
+        "detector": "Postgres",
+        "file": "README.md",
+        "line": 1,
+        "classification": "documented_placeholder_or_test"
+      },
+      {
+        "detector": "SlackWebhook",
+        "file": ".config/.semgrep/semgrep_rules.json",
+        "line": 9020,
+        "classification": "scanner_rule_definition"
+      },
+      {
+        "detector": "Postgres",
+        "file": "main.py",
+        "line": 1,
+        "classification": "historical_non_placeholder_credential_rotation_unconfirmed"
+      }
+    ]
+  }
+]

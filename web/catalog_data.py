@@ -1,12 +1,12 @@
 """Offline merchant-owned demo catalog + services fallback.
 
-Used only when the `commerce`/`ai` packages (built in parallel workstreams)
-are not importable, so the web layer stays fully functional: pages, quotes,
-deterministic AI-fallback recommendations. Prices here mirror
-config/merchant_catalog.json; the real Catalog re-reads that file when the
-commerce package is present.
+Used when a catalog, cart, AI package, or durable storage is unavailable.
+Browsing and server-priced quotes remain usable; the service factory prevents
+checkout on process-local storage. Prices are loaded from the same merchant
+catalog file used by the normal profile.
 """
 import json
+from copy import deepcopy
 import logging
 import re
 import threading
@@ -73,6 +73,16 @@ class SimpleProduct:
 _ASIN_RE = re.compile(r'^B0[A-Z0-9]{8}$')
 
 
+def _search_tokens(text):
+    aliases = {'लैंप': 'lamp', 'लैम्प': 'lamp', 'डेस्क': 'desk', 'माउस': 'mouse',
+               'ऑर्गनाइज़र': 'organizer', 'ऑर्गनाइजर': 'organizer', 'केबल': 'cable',
+               'स्टैंड': 'stand', 'कीबोर्ड': 'keyboard', 'पौधा': 'plant',
+               'organiser': 'organizer', 'organization': 'organizer'}
+    ignored = set('a an and the me show please under below budget max for of to एक के की का लिए मुझे दिखाओ सुझाइए'.split())
+    return {aliases.get(word, word) for word in re.findall(r'[\w\u0900-\u097f]+', str(text).casefold())
+            if word not in ignored and not word.isdecimal()}
+
+
 class SimpleCatalog:
     """Loads config/merchant_catalog.json with defensive guards."""
 
@@ -84,7 +94,9 @@ class SimpleCatalog:
     def _load(self):
         try:
             raw = json.loads(self._path.read_text())
-            entries = raw.get('products', raw if isinstance(raw, list) else [])
+            entries = raw if isinstance(raw, list) else raw.get('products', [])
+            if not isinstance(entries, list):
+                raise ValueError('catalog must contain a product array')
         except Exception as e:
             logger.error(f'SimpleCatalog: failed to load {self._path}: {e}')
             entries = []
@@ -95,16 +107,26 @@ class SimpleCatalog:
                     continue
                 if _ASIN_RE.match(sku):
                     continue  # defensive: Amazon ASINs never enter checkout
+                price = Decimal(str(e.get('price', '0')))
+                stock = e.get('stock', 0)
+                currency = e.get('currency', 'USD')
+                active = e.get('active', True)
+                if (not sku or any(p.sku == sku for p in self._products)
+                        or not price.is_finite() or price <= 0
+                        or type(stock) is not int or stock < 0
+                        or not isinstance(currency, str) or not re.fullmatch(r'[A-Z]{3}', currency)
+                        or type(active) is not bool):
+                    raise ValueError('invalid product price, stock, currency, or identity')
                 self._products.append(SimpleProduct(
                     sku=sku,
                     title=str(e.get('title', '')),
                     description=str(e.get('description', '')),
-                    price=Decimal(str(e.get('price', '0'))),
+                    price=price,
                     currency=str(e.get('currency', 'USD')),
-                    stock=int(e.get('stock', 0)),
+                    stock=stock,
                     category=str(e.get('category', '')),
                     version=int(e.get('version', 1)),
-                    active=bool(e.get('active', True)),
+                    active=active,
                 ))
             except Exception as ex:
                 logger.warning(f'SimpleCatalog: skipping bad entry: {ex}')
@@ -121,14 +143,17 @@ class SimpleCatalog:
     def search_products(self, query=None, category=None, budget_max=None, limit=8):
         results = []
         q = (query or '').strip().lower()
+        tokens = _search_tokens(q)
         for p in self.list_products():
+            if p.stock < 1:
+                continue
             if category and p.category.lower() != str(category).lower():
                 continue
             if budget_max is not None and p.price > Decimal(str(budget_max)):
                 continue
             if q:
-                hay = f'{p.title} {p.description} {p.category}'.lower()
-                if q not in hay and not any(tok in hay for tok in q.split()):
+                hay = _search_tokens(f'{p.title} {p.description} {p.category}')
+                if not tokens.intersection(hay):
                     continue
             results.append(p)
         results.sort(key=lambda p: (p.price, p.sku))
@@ -157,14 +182,21 @@ class InMemoryCommerceStorage:
 
     def create_quote(self, quote):
         with self._lock:
-            row = dict(quote)
+            row = deepcopy(quote.model_dump() if hasattr(quote, 'model_dump') else dict(quote))
             row['id'] = self._next_id()
-            self.quotes[quote['quote_id']] = row
-            return dict(row)
+            self.quotes[row['quote_id']] = row
+            return deepcopy(row)
 
     def get_quote(self, quote_id):
         q = self.quotes.get(quote_id)
-        return dict(q) if q else None
+        return deepcopy(q) if q else None
+
+    @staticmethod
+    def quote_to_data(row):
+        # Used by the real cart service when only durable storage is absent.
+        from commerce.schemas import CartQuoteData
+        return CartQuoteData.model_validate({key: value for key, value in row.items()
+                                             if key in CartQuoteData.model_fields})
 
     def update_quote_status(self, quote_id, status):
         with self._lock:
@@ -323,15 +355,22 @@ class SimpleCartService:
             raise ValueError('too many distinct items (max 10)')
         lines = []
         total = Decimal(0)
-        currency = 'USD'
+        currency = getattr(self.config, 'PAYPAL_CURRENCY', 'USD')
+        if currency != 'USD':
+            raise ValueError('unsupported cart currency')
+        seen = set()
         for it in items:
+            if hasattr(it, 'model_dump'):
+                it = it.model_dump()
+            if not isinstance(it, dict):
+                raise ValueError('each cart item must be an object')
             sku = str(it.get('sku', ''))
-            try:
-                qty = int(it.get('quantity', 1))
-            except (TypeError, ValueError):
-                qty = 1
-            if qty < 1 or qty > 10:
+            qty = it.get('quantity', 1)
+            if type(qty) is not int or qty < 1 or qty > 10:
                 raise ValueError(f'quantity out of bounds for {sku}')
+            if sku in seen:
+                raise ValueError(f'duplicate sku: {sku}')
+            seen.add(sku)
             product = self.catalog.get_product(sku)
             if product is None:
                 raise ValueError(f'unknown sku: {sku}')
@@ -339,10 +378,11 @@ class SimpleCartService:
                 raise ValueError(f'product inactive: {sku}')
             if product.stock < qty:
                 raise ValueError(f'insufficient stock for {sku}')
+            if product.currency != currency:
+                raise ValueError(f'product currency does not match cart currency: {sku}')
             unit = product.price  # catalog price only - never trust client
             line_total = (unit * qty).quantize(Decimal('0.01'))
             total += line_total
-            currency = product.currency
             lines.append({
                 'sku': sku,
                 'title': product.title,
@@ -367,9 +407,11 @@ class SimpleCartService:
         self.storage.create_quote(quote)
         return quote
 
-    def validate_quote(self, quote_id):
+    def validate_quote(self, quote_id, actor_id=None):
         row = self.storage.get_quote(quote_id)
         if not row:
+            raise QuoteNotFound(quote_id)
+        if actor_id is not None and row.get('actor_id') != actor_id:
             raise QuoteNotFound(quote_id)
         if row.get('status') != 'OPEN':
             raise QuoteNotOpen(str(row.get('status')))
@@ -377,18 +419,19 @@ class SimpleCartService:
         now = datetime.now(UTC)
         if expires is not None:
             exp = expires if getattr(expires, 'tzinfo', None) else expires.replace(tzinfo=UTC)
-            if now > exp:
+            if now >= exp:
                 self.storage.update_quote_status(quote_id, 'EXPIRED')
                 raise QuoteExpired(quote_id)
         return row
 
-    def refresh_check(self, quote_id):
-        row = self.storage.get_quote(quote_id)
-        if not row:
-            raise QuoteNotFound(quote_id)
+    def refresh_check(self, quote_id, actor_id=None):
+        row = self.validate_quote(quote_id, actor_id=actor_id)
         for line in row.get('items', []):
             product = self.catalog.get_product(line['sku'])
-            if product is None or product.version != line.get('version'):
+            if (product is None or not product.active
+                    or product.version != line.get('version')
+                    or product.price != line.get('unit_price')
+                    or product.currency != row.get('currency')):
                 raise QuoteStale(quote_id)
             if product.stock < int(line['quantity']):
                 raise QuoteStale(quote_id)
@@ -428,30 +471,51 @@ class DeterministicAI:
                 'rate_limited': True,
             }
         query = str(query or '')[:500]
-        budget = budget_hint
-        if budget is None:
-            m = re.search(r'(\d+(?:\.\d{1,2})?)', query)
-            if m and re.search(r'(under|below|max|budget|less than|\$)', query, re.IGNORECASE):
-                budget = m.group(1)
+        budget = None
+        if budget_hint is not None:
+            if isinstance(budget_hint, bool):
+                raise ValueError('budget must be a finite nonnegative amount')
+            try:
+                budget = Decimal(str(budget_hint))
+            except Exception as exc:
+                raise ValueError('budget must be a finite nonnegative amount') from exc
+            if not budget.is_finite() or budget < 0:
+                raise ValueError('budget must be a finite nonnegative amount')
+        match = re.search(r'(?:under|below|max|budget|less than)\s*\$?\s*(\d+(?:\.\d{1,2})?)', query, re.IGNORECASE)
+        if match:
+            parsed = Decimal(match.group(1))
+            budget = parsed if budget is None else min(budget, parsed)
         results = self.catalog.search_products(query=query, budget_max=budget, limit=4)
         items = [{
             'sku': p.sku,
-            'reason': f'Matches your search ({p.category}).',
+            'reason': (f'कैटलॉग मूल्य {p.price:.2f} {p.currency}; उपलब्ध उत्पाद।'
+                       if str(locale).startswith('hi') else f'Catalog price {p.price:.2f} {p.currency}; available.'),
             'price': f'{p.price:.2f}',
             'currency': p.currency,
         } for p in results]
         missing = []
         if budget is None and not re.search(r'\d', query):
             missing.append('budget')
-        if str(locale).startswith('hi') and not items:
-            tradeoffs = 'कोई मेल नहीं मिला।'
+        if not items:
+            missing.append('No available matches; refine your search or budget.')
+        if str(locale).startswith('hi'):
+            tradeoffs = 'कैटलॉग से मिलान; कीमत के अनुसार क्रमबद्ध।'
         else:
             tradeoffs = 'Ranked by price (lowest first) among catalog matches.'
+        cart = []
+        total = Decimal('0')
+        for product in results:
+            if product.currency != 'USD':
+                continue
+            if budget is not None and total + product.price > budget:
+                continue
+            cart.append({'sku': product.sku, 'quantity': 1})
+            total += product.price
         return {
             'items': items,
             'tradeoffs': tradeoffs,
             'missing_info': missing,
-            'cart_proposal': [{'sku': it['sku'], 'quantity': 1} for it in items[:4]],
+            'cart_proposal': cart,
             'confidence': 'low',
             'provider': 'deterministic-fallback',
             'fallback': True,
