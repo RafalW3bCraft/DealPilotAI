@@ -448,3 +448,93 @@ def test_rate_limiter_kicks_in(config, catalog):
     # a different actor is unaffected
     other = svc.recommend("mouse under $50", actor_id="shopper-2")
     assert other.fallback is False
+
+# Release regressions: provider text is untrusted, budgets apply to whole carts.
+def test_all_model_commercial_prose_is_replaced(config, catalog):
+    claim = "FREE shipping, 90% discount, guaranteed delivery tomorrow; pay EUR 1."
+    payload = valid_payload(intent_summary=claim, tradeoffs=claim, missing_info=[claim])
+    payload['items'][0]['reason'] = claim
+    rec = make_service(config, catalog, provider=provider_returning(payload)).recommend('mouse')
+    assert claim not in rec.model_dump_json()
+    assert '19.99 USD' in rec.items[0].reason
+    assert 'Wireless Mouse' in rec.items[0].reason
+
+
+def test_unavailable_and_duplicate_recommendations_removed(config, catalog):
+    catalog.get_product('SKU-003').active = False
+    catalog.get_product('SKU-002').stock = 0
+    item = valid_payload()['items'][0]
+    rec = make_service(config, catalog, provider=provider_returning(valid_payload(
+        items=[item, item, dict(item, sku='SKU-003'), dict(item, sku='SKU-002')],
+        cart_proposal=[{'sku': 'SKU-003', 'quantity': 1}, {'sku': 'SKU-002', 'quantity': 1}],
+    ))).recommend('mouse')
+    assert [i.sku for i in rec.items] == ['SKU-001']
+    assert rec.cart_proposal == []
+
+
+def test_cart_proposal_respects_whole_budget_and_stock(config, catalog):
+    catalog.get_product('SKU-001').stock = 1
+    rec = make_service(config, catalog, provider=provider_returning(valid_payload(
+        cart_proposal=[{'sku': 'SKU-001', 'quantity': 2},
+                       {'sku': 'SKU-003', 'quantity': 1},
+                       {'sku': 'SKU-003', 'quantity': 1}],
+    ))).recommend('accessories', budget_hint='40')
+    assert [(i.sku, i.quantity) for i in rec.cart_proposal] == [('SKU-003', 1)]
+
+
+@pytest.mark.parametrize('budget', [Decimal('0'), '0', 0])
+def test_zero_budget_has_no_recommendations(config, catalog, budget):
+    rec = make_service(config, catalog, provider=provider_returning(valid_payload())).recommend(
+        'mouse', budget_hint=budget)
+    assert rec.items == []
+    assert rec.cart_proposal == []
+
+
+@pytest.mark.parametrize('budget', ['NaN', 'Infinity', '-1', 'invalid', True, {}])
+def test_invalid_budget_rejected_at_service_boundary(config, catalog, budget):
+    with pytest.raises(ValueError, match='budget'):
+        make_service(config, catalog, provider=provider_returning(valid_payload())).recommend(
+            'mouse', budget_hint=budget)
+
+
+def test_explicit_hint_cannot_raise_budget_extracted_from_query(config, catalog):
+    rec = make_service(config, catalog, provider=provider_returning(valid_payload())).recommend(
+        'mouse under $10', budget_hint='100')
+    assert rec.items == []
+    assert rec.cart_proposal == []
+
+
+@pytest.mark.parametrize('quantity', [True, '2', 1.5])
+def test_model_quantity_coercions_are_rejected(config, catalog, quantity):
+    rec = make_service(config, catalog, provider=provider_returning(valid_payload(
+        cart_proposal=[{'sku': 'SKU-001', 'quantity': quantity}],
+    ))).recommend('mouse')
+    assert rec.fallback is True
+
+
+def test_fallback_never_substitutes_random_products(catalog):
+    config = make_config(provider='')
+    config.OPENAI_API_KEY = ''
+    rec = make_service(config, catalog).recommend('quantum teleportation portal')
+    assert rec.items == []
+    assert rec.cart_proposal == []
+    assert any('match' in message for message in rec.missing_info)
+
+
+@pytest.mark.parametrize('query', ['please show me a wireless mouse under $30', 'माउस दिखाओ'])
+def test_fallback_relevant_english_hindi_search(catalog, query):
+    config = make_config(provider='')
+    config.OPENAI_API_KEY = ''
+    rec = make_service(config, catalog).recommend(query)
+    assert [i.sku for i in rec.items] == ['SKU-001']
+
+
+def test_provider_client_has_bounded_timeout_and_retries(monkeypatch, catalog):
+    captured = {}
+    def build_client(**kwargs):
+        captured.update(kwargs)
+        return object()
+    monkeypatch.setattr(AIShoppingService, '_build_openai_client', build_client)
+    make_service(make_config(), catalog)
+    assert captured['timeout'] == 20.0
+    assert captured['max_retries'] == 1

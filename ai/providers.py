@@ -9,6 +9,7 @@ Selection order: explicit callable > OpenAI > Featherless > none
 from __future__ import annotations
 
 from typing import Any
+import math
 
 OPENAI_DEFAULT_MODEL = "gpt-4o-mini"
 FEATHERLESS_DEFAULT_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct"
@@ -35,17 +36,25 @@ def select_provider(config: Any) -> dict:
     if provider == "featherless" and not featherless_key:
         raise RuntimeError("AI_PROVIDER=featherless requires FEATHERLESS_API_KEY.")
 
+    timeout = float(getattr(config, "AI_TIMEOUT_SECONDS", 20.0))
+    retries = getattr(config, "AI_MAX_RETRIES", 1)
+    if not math.isfinite(timeout) or not 1 <= timeout <= 60:
+        raise ValueError("AI_TIMEOUT_SECONDS must be between 1 and 60 seconds")
+    if type(retries) is not int or not 0 <= retries <= 2:
+        raise ValueError("AI_MAX_RETRIES must be an integer between 0 and 2")
+    transport = {"timeout": timeout, "max_retries": retries}
+
     if provider == "openai" or (not provider and openai_key):
         return {
             "name": "openai",
             "model": model or OPENAI_DEFAULT_MODEL,
-            "client_kwargs": {"api_key": openai_key},
+            "client_kwargs": {"api_key": openai_key, **transport},
         }
     if provider == "featherless" or (not provider and featherless_key):
         return {
             "name": "featherless",
             "model": model or FEATHERLESS_DEFAULT_MODEL,
-            "client_kwargs": {"api_key": featherless_key, "base_url": featherless_base},
+            "client_kwargs": {"api_key": featherless_key, "base_url": featherless_base, **transport},
         }
     return {"name": "", "model": "", "client_kwargs": {}}
 

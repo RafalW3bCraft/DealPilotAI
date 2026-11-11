@@ -78,6 +78,27 @@
     return element;
   }
 
+  var selectionKey = 'dealpilot-cart-selection';
+  function saveSelection() {
+    var form = document.getElementById('dp-quote-form');
+    if (!form) { return; }
+    var selected = [];
+    form.querySelectorAll('input[name="sel"]').forEach(function (input) {
+      if (input.type === 'checkbox' && !input.checked) { return; }
+      var quantity = Array.from(form.querySelectorAll('input[name^="qty_"]'))
+        .find(function (field) { return field.name === 'qty_' + input.value; });
+      selected.push({ sku: input.value, quantity: quantity ? quantity.value : '1' });
+    });
+    try { sessionStorage.setItem(selectionKey, JSON.stringify(selected)); } catch (_) { /* Storage can be disabled. */ }
+  }
+
+  function sameOriginOrderUrl(value) {
+    try {
+      var url = new URL(value, window.location.origin);
+      return url.origin === window.location.origin && /^\/orders\/[^/]+$/.test(url.pathname) ? url.href : null;
+    } catch (_) { return null; }
+  }
+
   function renderRecommendations(container, response) {
     container.replaceChildren();
     if (response.ai_disclaimer) {
@@ -90,6 +111,22 @@
       appendText(card, 'h3', '', item.sku || 'Catalog product');
       appendText(card, 'p', 'dp-card-price', (item.price || '') + ' ' + (item.currency || ''));
       appendText(card, 'p', 'dp-card-reason', item.reason || '');
+      var checkbox = Array.from(document.querySelectorAll('#dp-quote-form input[name="sel"]'))
+        .find(function (input) { return input.value === item.sku && !input.disabled; });
+      if (checkbox) {
+        var title = checkbox.closest('.dp-card').querySelector('.dp-card-title');
+        card.querySelector('h3').textContent = title.textContent;
+        var choose = appendText(card, 'button', 'dp-btn dp-btn-secondary dp-recommend-add', checkbox.checked ? 'Selected in your cart' : 'Add to your cart');
+        choose.type = 'button';
+        choose.setAttribute('aria-pressed', String(checkbox.checked));
+        choose.addEventListener('click', function () {
+          checkbox.checked = !checkbox.checked;
+          choose.setAttribute('aria-pressed', String(checkbox.checked));
+          choose.textContent = checkbox.checked ? 'Selected in your cart' : 'Add to your cart';
+          saveSelection();
+          setMessage(document.getElementById('dp-quote-msg'), checkbox.checked ? 'Product selected. Review your cart below.' : 'Product removed from your selection.');
+        });
+      }
       container.appendChild(card);
     });
     if (response.tradeoffs) {
@@ -150,12 +187,39 @@
 
   var quoteForm = document.getElementById('dp-quote-form');
   if (quoteForm) {
+    if (quoteForm.querySelector('input[type="checkbox"][name="sel"]')) {
+      try {
+        var saved = JSON.parse(sessionStorage.getItem(selectionKey) || '[]');
+        if (Array.isArray(saved)) {
+          saved.forEach(function (item) {
+            var checkbox = Array.from(quoteForm.querySelectorAll('input[name="sel"]'))
+              .find(function (input) { return input.value === item.sku && !input.disabled; });
+            if (!checkbox) { return; }
+            checkbox.checked = true;
+            var quantity = Array.from(quoteForm.querySelectorAll('input[name^="qty_"]'))
+              .find(function (input) { return input.name === 'qty_' + item.sku; });
+            if (quantity && Number.isSafeInteger(Number(item.quantity)) && Number(item.quantity) >= 1 && Number(item.quantity) <= Number(quantity.max)) {
+              quantity.value = item.quantity;
+            }
+          });
+        }
+      } catch (_) { /* A fresh selection is safe when browser storage is unavailable. */ }
+    }
+    quoteForm.addEventListener('input', function () {
+      saveSelection();
+      var button = document.getElementById('dp-checkout-btn');
+      if (button) {
+        button.disabled = true;
+        setMessage(document.getElementById('dp-checkout-msg'), 'Update your cart total to confirm these quantities before checkout.');
+      }
+    });
     quoteForm.addEventListener('submit', function (event) {
       event.preventDefault();
       var items = [];
       var message = document.getElementById('dp-quote-msg');
       var invalidQuantity = null;
-      quoteForm.querySelectorAll('input[name="sel"]:checked').forEach(function (checkbox) {
+      quoteForm.querySelectorAll('input[name="sel"]').forEach(function (checkbox) {
+        if (checkbox.type === 'checkbox' && !checkbox.checked) { return; }
         var sku = checkbox.getAttribute('data-sku');
         var quantityInput = Array.from(quoteForm.querySelectorAll('input[name^="qty_"]'))
           .find(function (input) { return input.name === 'qty_' + sku; });
@@ -179,6 +243,7 @@
         return;
       }
 
+      saveSelection();
       var submitButton = quoteForm.querySelector('button[type="submit"]');
       setMessage(message, 'Checking current prices and availability…');
       setBusy(submitButton, true, 'Building your cart…');
@@ -214,11 +279,16 @@
       setBusy(checkoutButton, true, 'Connecting to PayPal…');
       postJson('/checkout/start', { quote_id: quoteId })
         .then(function (result) {
+          var orderUrl = sameOriginOrderUrl(result.body.order_url);
+          if (orderUrl && (result.status === 202 || ['PAID', 'FAILED', 'CANCELED'].indexOf(result.body.status) !== -1)) {
+            window.location.assign(orderUrl);
+            return;
+          }
           if (result.status === 202) {
             setMessage(
               message,
               result.body.detail || 'Your existing checkout is being recovered. Retry shortly; no duplicate order was created.',
-              'error'
+              'pending'
             );
             return;
           }
@@ -241,6 +311,50 @@
     });
   }
 
+  var orderPanel = document.getElementById('dp-order-status');
+  if (orderPanel && orderPanel.dataset.statusUrl) {
+    var refreshButton = document.getElementById('dp-order-refresh');
+    var orderMessage = document.getElementById('dp-order-message');
+    var pollCount = 0;
+    var maxPolls = 8;
+    var pollTimer = null;
+    var requestPending = false;
+    var finalStates = ['PAID', 'FAILED', 'CANCELED'];
+    var refreshOrder = function () {
+      if (requestPending) { return; }
+      window.clearTimeout(pollTimer);
+      requestPending = true;
+      pollCount += 1;
+      setBusy(refreshButton, true, 'Checking order…');
+      fetch(orderPanel.dataset.statusUrl, { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (response) {
+          if (!response.ok) { throw new Error('Could not check your order. Keep this page link and try Refresh order status again.'); }
+          return response.json();
+        })
+        .then(function (order) {
+          if (order.status && order.status !== orderPanel.dataset.status) {
+            window.location.reload();
+            return;
+          }
+          if (finalStates.indexOf(order.status) !== -1) {
+            setMessage(orderMessage, 'Order status is up to date.');
+            return;
+          }
+          if (pollCount < maxPolls) {
+            setMessage(orderMessage, 'Awaiting verified payment confirmation. Checking again shortly…', 'pending');
+            pollTimer = window.setTimeout(refreshOrder, 5000);
+          } else {
+            setMessage(orderMessage, 'Confirmation is taking longer. Automatic checks have paused. Keep this order link and use Refresh order status, or contact the merchant. Do not start another payment.', 'pending');
+          }
+        })
+        .catch(function (error) { setMessage(orderMessage, error.message || 'Unable to check your order. Try refreshing its status.', 'error'); })
+        .then(function () { requestPending = false; setBusy(refreshButton, false); });
+    };
+    refreshButton.addEventListener('click', refreshOrder);
+    if (finalStates.indexOf(orderPanel.dataset.status) === -1) { pollTimer = window.setTimeout(refreshOrder, 2000); }
+    window.addEventListener('pagehide', function () { window.clearTimeout(pollTimer); });
+  }
+
   var expiryElement = document.getElementById('dp-expiry');
   if (expiryElement) {
     var expiryTimestamp = parseInt(expiryElement.getAttribute('data-expires'), 10);
@@ -250,6 +364,8 @@
         var secondsLeft = expiryTimestamp - Math.floor(Date.now() / 1000);
         if (secondsLeft <= 0) {
           countdown.textContent = '(expired)';
+          if (checkoutButton) { checkoutButton.disabled = true; }
+          setMessage(document.getElementById('dp-checkout-msg'), 'This quote expired. Update your cart total to continue.', 'error');
           return;
         }
         var minutes = Math.floor(secondsLeft / 60);

@@ -562,3 +562,19 @@ button:focus-visible, input:focus-visible, a:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+/* Product sketches are decorative; their catalog names carry the accessible label. */
+.dp-product-illustration { width: 85%; max-width: 180px; height: 110px; color: #4137a8; }
+.dp-cart-quantity { width: 4.5rem; padding: .35rem; border: 1px solid #9aa5b6; border-radius: .4rem; }
+.dp-cart-update { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; padding-top: 1rem; }
+.dp-cart-update .dp-form-message { flex: 1 1 180px; margin: 0; }
+.dp-recommend-add { justify-self: start; }
+#dp-order-refresh { margin-bottom: 1rem; }
+.dp-form-message[data-state="pending"] { color: #535170; }
+@media (max-width: 620px) {
+  .dp-product-illustration { height: 78px; width: 100%; }
+  .dp-cart-items .dp-table { min-width: 0; }
+  .dp-cart-items .dp-table th, .dp-cart-items .dp-table td { padding: .55rem .25rem; }
+  .dp-cart-items .dp-table td:first-child { max-width: 100px; overflow-wrap: anywhere; }
+  .dp-cart-quantity { width: 3.4rem; }
+}

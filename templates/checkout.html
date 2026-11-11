@@ -8,8 +8,8 @@
     <p class="dp-eyebrow">PAYMENT APPROVAL</p>
     <h1 id="checkout-title">You’re in control</h1>
     <p class="dp-muted">We’ll securely prepare your PayPal sandbox order. You’ll review the details and approve it on PayPal before any capture is requested.</p>
-    <button id="dp-checkout-btn" class="dp-btn dp-btn-primary"
-            data-quote-id="{{ quote_id }}">Continue to PayPal Sandbox <span aria-hidden="true">→</span></button>
+    {% if checkout_enabled|default(true) %}<button id="dp-checkout-btn" class="dp-btn dp-btn-primary"
+            data-quote-id="{{ quote_id }}">Continue to PayPal Sandbox <span aria-hidden="true">→</span></button>{% else %}<p class="dp-alert dp-alert-info" role="status">Merchant checkout is currently unavailable. Return to the shop to browse.</p>{% endif %}
     <p id="dp-checkout-msg" class="dp-form-message" aria-live="polite" role="status"></p>
     <p class="dp-safe-note"><span aria-hidden="true">✓</span> Sandbox only · No real charges</p>
   </section>

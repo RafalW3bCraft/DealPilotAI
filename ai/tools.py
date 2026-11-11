@@ -13,6 +13,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any, Protocol, runtime_checkable
 
+from ai.search import relevance, search_tokens
+
 
 class ToolError(Exception):
     """Raised when a tool call is invalid (e.g. unknown SKU)."""
@@ -70,10 +72,20 @@ class CatalogTools:
         """Search active products. Returns plain dicts (JSON-safe)."""
         if limit < 1:
             raise ToolError("limit must be >= 1")
-        products = self._catalog.search_products(
-            query=query, category=category, budget_max=budget_max, limit=limit
-        )
-        return [_product_to_dict(p) for p in products]
+        # Search individual normalized tokens, so compatible catalogs need not
+        # implement language normalization or natural-language phrase matching.
+        searches = sorted(search_tokens(query)) if query else [""]
+        products = {}
+        for token in searches:
+            for product in self._catalog.search_products(
+                query=token, category=category, budget_max=budget_max, limit=1000
+            ):
+                if product.active and product.stock > 0:
+                    products[product.sku] = product
+        ranked = sorted(products.values(), key=lambda p: (
+            -relevance(query, p.title, p.category, p.description), p.price, p.sku
+        ))
+        return [_product_to_dict(p) for p in ranked[:limit]]
 
     def get_product(self, sku: str) -> dict | None:
         """Fetch one product by SKU. None if not found."""
@@ -106,15 +118,18 @@ class CatalogTools:
         currency: str | None = None
         for entry in items:
             sku = str(entry.get("sku", ""))
-            try:
-                quantity = int(entry.get("quantity", 0))
-            except (TypeError, ValueError):
+            quantity = entry.get("quantity", 0)
+            if type(quantity) is not int:
                 raise ToolError(f"invalid quantity for sku {sku}")
             if quantity < 1 or quantity > 10:
                 raise ToolError(f"quantity out of range (1..10) for sku {sku}")
             product = self._catalog.get_product(sku)
             if product is None:
                 raise ToolError(f"unknown sku: {sku}")
+            if not product.active or product.stock < quantity:
+                raise ToolError(f"unavailable product: {sku}")
+            if any(line["sku"] == sku for line in lines):
+                raise ToolError(f"duplicate sku: {sku}")
             unit_price = Decimal(str(product.price))
             line_total = unit_price * quantity
             prod_currency = str(product.currency)
