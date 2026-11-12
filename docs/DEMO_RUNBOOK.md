@@ -1,23 +1,28 @@
-# 170-second demonstration and recording runbook
+# Demonstration runbook — revised production
 
-## Prepare
+The film follows the operator's revised scope: genuine AI and sandbox order creation, an explanation of the remaining payment workflow, and a visibly labeled illustrative success popup. No buyer approval or capture is performed for this edit. Real capture/restart/webhook release gates remain unresolved.
 
-Install the pinned environment, use private rotated keys, set the callback origin, start `python scripts/run_web.py`, and run the live AI checks. Use a sandbox merchant and a separate sandbox personal buyer. Keep password entry, tokens, emails and account details off-screen. Do not replace a failed live integration with a fixture while calling it real.
+## Local deliverables
 
-The local `docs/demo/live-ai-cart-rehearsal.webm` records genuine AI-to-cart behavior with payment deliberately disabled. It is rehearsal footage, not the final complete transaction video. Screenshots and integration JSON contain the current independently observed evidence.
+The [final demo package](demo/final/README.md) contains the 170-second 1080p landscape film, 30-second portrait teaser, ElevenLabs narration, captions, thumbnail, source assets and verification manifest. Public upload and submission remain owner actions.
 
-| Time | Screen / action | Narration |
+## Exact master timeline
+
+| Time | Screen / purpose | Evidence kind |
 |---|---|---|
-| 0–15s | Storefront and target shopper need | “DealPilotAI connects a natural-language shopping request to a merchant catalog and a checkout the shopper controls.” |
-| 15–40s | Submit a real lamp/organizer request; show actual live recommendations | “The AI selects catalog products. The server checks each SKU, price, availability and the whole cart budget. Fallback is labeled when inference is unavailable.” |
-| 40–65s | Select recommendations, edit quantity and review server quote | “These prices come from the merchant catalog. Changing quantities creates a new server quote; the model cannot invent a charge.” |
-| 65–110s | Follow genuine PayPal sandbox approval and approve as buyer | “PayPal receives the verified quote. I review and approve the sandbox payment myself. Only then can the application capture it.” |
-| 110–135s | Actual completed receipt, capture ID and restart retrieval | “The receipt shows the verified capture and persisted amount. This is the same transaction after reopening the application.” |
-| 135–155s | Merchant dashboard and compact architecture | “The merchant sees the durable record. Atomic finalization, idempotency, signature verification and reconciliation protect retries.” |
-| 155–170s | Technologies, separate affiliate path and sandbox statement | “Flask, grounded AI and PayPal Orders v2 provide a controlled commerce demonstration. Amazon referrals are separate. This is sandbox software, with no real charges or physical shipping.” |
+| 0–12s | Describe. Discover. Decide. | recorded or source verified |
+| 12–37s | A useful answer. Grounded in the catalog. | recorded or source verified |
+| 37–58s | Your intent travels with you. | recorded or source verified |
+| 58–82s | Change quantities. See the real total. | recorded or source verified |
+| 82–100s | A real sandbox order. Approval still pending. | recorded or source verified |
+| 100–116s | What happens after approval? | illustration |
+| 116–124s | An illustrated outcome, clearly labeled. | illustration |
+| 124–138s | The merchant sees the actual state. | recorded or source verified |
+| 138–160s | AI selects. The server validates. You approve. | recorded or source verified |
+| 160–170s | Thoughtful discovery. Human control. | recorded or source verified |
 
-## Required recording gates
+The popup appears for eight seconds and states “ILLUSTRATED OUTCOME · NOT A RECEIPT” and “No payment captured.” The narrator explicitly explains the same limitation. The merchant footage shows the actual pending order, not a simulated paid record.
 
-Use the capture and restart narration only after those actions are executed. Use the webhook claim as an implemented safeguard until genuine signed delivery is evidenced. Complete buyer approval in advance of recording if login takes too long; never expose the password. Show the actual final app, not screenshots standing in for interaction.
+## Review and publication
 
-The owner must record the full verified flow, make a YouTube upload publicly visible, verify playback and duration below three minutes, add the real URL to Devpost, and submit before November 12, 2026, 3:00 PM Eastern. No upload or submission has been performed. A locally reproducible project is the selected judge-access path; no hosting deployment is planned.
+Run `python scripts/render_demo.py --verify`, review both exports with sound and captions, check privacy and all illustration disclosures, then publish the selected video yourself. Before changing any release gate, distinguish genuine integration evidence from the illustrative success scene. The selected judge-access path remains documented local setup; no hosting deployment is planned.

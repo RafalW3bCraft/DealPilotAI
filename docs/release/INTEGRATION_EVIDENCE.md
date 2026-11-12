@@ -27,3 +27,7 @@ The upstream baseline [run 42054489153](https://github.com/RafalW3bCraft/DealPil
 ## Historical credential review
 
 TruffleHog source/history scanning ran without credential verification. Working-source candidates are negative URL test fixtures. Historical placeholders and a scanner-rule definition were identified, plus one non-placeholder PostgreSQL credential candidate in `main.py` at commit `79c509760c2b5826e5a171f8eb00311c7c3469ce`. Its password does not match the current private DATABASE_URL password; that does not establish whether the old credential is revoked. Operator confirmation/rotation remains required. No historical credential was used for authentication or printed. See [redacted review](../evidence/historical_secret_review.json). Git history was not rewritten.
+
+## Revised video scope
+
+The operator chose order creation plus an explicitly labeled illustrative success popup for the finished demo. A fresh 43.49 USD order was read back as PAYER_ACTION_REQUIRED with zero captures; see [video order evidence](../demo/final/assets/order-evidence.json). The narrated video explains buyer approval and capture as later steps. Its popup is not a receipt and does not change the capture, restart or genuine-webhook gates. [Video package](../demo/final/README.md).
