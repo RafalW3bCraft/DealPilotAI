@@ -24,6 +24,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 from ai.agent import AIShoppingService
 from commerce.catalog import Catalog
 from config import Config
+from scripts.ai_release_smoke import _grounding_failures
 
 
 def main() -> int:
@@ -50,25 +51,30 @@ def main() -> int:
     print(f"tradeoffs={result.tradeoffs[:200]}")
 
     # Grounding verification (independent of what the service already checks)
-    failures = []
+    failures = _grounding_failures(result, catalog)
+    if not result.items:
+        failures.append("provider returned no recommendations")
+    if not {"DP-LAMP-001", "DP-TRAY-002"} <= {item.sku for item in result.items}:
+        failures.append("recommendations omit requested lamp or organizer")
+    cart_total = sum((catalog.get_product(item.sku).price * item.quantity
+                      for item in result.cart_proposal
+                      if catalog.get_product(item.sku) is not None), start=0)
+    if cart_total > 80:
+        failures.append("proposed cart exceeds shopper total budget")
     if result.fallback:
         failures.append("provider fell back to deterministic mode (not a real AI pass)")
-    for it in result.items:
-        p = catalog.get_product(it.sku)
-        if p is None:
-            failures.append(f"hallucinated SKU {it.sku}")
-        elif str(p.price) != it.price:
-            failures.append(f"price mismatch {it.sku}: catalog {p.price} vs ai {it.price}")
-
     evidence = {
         "timestamp_utc": datetime.now(UTC).isoformat(),
         "provider": result.provider,
-        "model": getattr(config, 'AI_MODEL', '') or 'provider-default',
+        "model": service.model,
+        "response_format": service.response_format,
         "fallback": result.fallback,
         "query": query,
         "items": [{"sku": i.sku, "price": i.price, "currency": i.currency} for i in result.items],
         "confidence": result.confidence,
         "grounding_failures": failures,
+        "status": "FAIL" if failures else "PASS",
+        "explanations": "server-authored catalog facts; provider selects products and quantities",
     }
     out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                            'docs', 'evidence')

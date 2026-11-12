@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from urllib.parse import urlparse
@@ -133,7 +134,7 @@ class CheckoutService:
     @staticmethod
     def _approve_url(order: dict) -> str | None:
         for link in order.get("links", []) or []:
-            if link.get("rel") != "approve":
+            if link.get("rel") not in {"approve", "payer-action"}:
                 continue
             href = link.get("href")
             if not CheckoutService._trusted_paypal_approval_url(href):
@@ -155,44 +156,6 @@ class CheckoutService:
             for cap in payments.get("captures") or []:
                 out.append(cap)
         return out
-
-    def _record_verified_capture(
-        self,
-        attempt_id: int,
-        capture_id: str | None,
-        amount: Decimal,
-        currency: str,
-        verified_at: datetime,
-    ) -> bool:
-        if not capture_id:
-            return False
-        existing = self.storage.get_capture(capture_id=capture_id)
-        if existing is not None:
-            return (
-                existing.checkout_attempt_id == attempt_id
-                and existing.status == "COMPLETED"
-                and existing.amount == amount
-                and existing.currency == currency
-            )
-        try:
-            self.storage.record_capture(
-                attempt_id=attempt_id,
-                capture_id=capture_id,
-                amount=amount,
-                currency=currency,
-                status="COMPLETED",
-                verified_at=verified_at.replace(tzinfo=None),
-            )
-            return True
-        except DuplicateCapture:
-            existing = self.storage.get_capture(capture_id=capture_id)
-            return bool(
-                existing
-                and existing.checkout_attempt_id == attempt_id
-                and existing.status == "COMPLETED"
-                and existing.amount == amount
-                and existing.currency == currency
-            )
 
     def _existing_attempt_result(self, existing) -> dict:
         result = {
@@ -252,7 +215,7 @@ class CheckoutService:
                 result["approval_recovery_pending"] = result["status"] != PAID
                 return result
 
-        if order.get("status") in {"CREATED", "APPROVED"}:
+        if order.get("status") in {"CREATED", "APPROVED", "PAYER_ACTION_REQUIRED"}:
             result["approve_url"] = self._approve_url(order)
         result["approval_recovery_pending"] = result["approve_url"] is None
         return result
@@ -260,13 +223,19 @@ class CheckoutService:
     # -- start_checkout ---------------------------------------------------
 
     def start_checkout(self, actor_id: str, quote_id: str, buyer_id: str) -> dict:
-        quote = self.cart_service.validate_quote(quote_id, actor_id=actor_id)
-        self.cart_service.refresh_check(quote_id, actor_id=actor_id)
-
+        assert_checkout_allowed(self.config)
+        # Ownership is checked before revealing a replay, even after payment/expiry.
+        quote_row = self.storage.get_quote(quote_id)
+        from .exceptions import QuoteNotFound
+        if quote_row is None or quote_row.actor_id != actor_id:
+            raise QuoteNotFound(quote_id)
         request_id = self._request_id(quote_id, buyer_id)
         existing = self.storage.get_attempt(request_id=request_id)
         if existing is not None:
             return self._existing_attempt_result(existing)
+
+        quote = self.cart_service.validate_quote(quote_id, actor_id=actor_id)
+        self.cart_service.refresh_check(quote_id, actor_id=actor_id)
 
         quote_row = self.storage.get_quote(quote_id)
         try:
@@ -294,10 +263,18 @@ class CheckoutService:
             }
         ]
         try:
+            from config import validate_app_base_url
+            base = validate_app_base_url(getattr(self.config, 'APP_BASE_URL', 'http://127.0.0.1:5000'))
             order = self.gateway.create_order(
                 intent="CAPTURE",
                 purchase_units=purchase_units,
                 request_id=request_id,
+                experience_context={
+                    'return_url': base + '/paypal/return',
+                    'cancel_url': base + '/paypal/cancel',
+                    'user_action': 'PAY_NOW',
+                    'shipping_preference': 'NO_SHIPPING',
+                },
             )
         except Exception as exc:
             if not _is_ambiguous_gateway_error(exc):
@@ -421,7 +398,7 @@ class CheckoutService:
             )
 
         # Single-flight: only one worker may flip into CAPTURE_PENDING.
-        capture_request_id = attempt.capture_request_id or f"capture-{attempt_id}"
+        capture_request_id = attempt.capture_request_id or str(uuid.uuid4())
         moved = self.storage.set_attempt_status(
             attempt_id,
             CAPTURE_PENDING,
@@ -477,11 +454,13 @@ class CheckoutService:
                 self.storage.set_attempt_status(
                     attempt_id, FAILED, (CAPTURE_PENDING,)
                 )
-                return {"attempt_id": attempt_id, "status": FAILED}
+                current = self.storage.get_attempt(attempt_id=attempt_id)
+                return {"attempt_id": attempt_id, "status": current.status}
             pending = next((c for c in captures if c.get("status") == "PENDING"), None)
             if pending is not None:
                 # No fake success: stay CAPTURE_PENDING until webhook/reconcile.
-                return {"attempt_id": attempt_id, "status": CAPTURE_PENDING}
+                current = self.storage.get_attempt(attempt_id=attempt_id)
+                return {"attempt_id": attempt_id, "status": current.status}
             self.storage.set_attempt_status(attempt_id, REQUIRES_REVIEW, (CAPTURE_PENDING,))
             raise AmbiguousCheckoutError(
                 "capture response had no COMPLETED or PENDING capture"
@@ -496,27 +475,14 @@ class CheckoutService:
             raise AmountMismatch("capture amount differs from quote snapshot")
 
         capture_id = completed.get("id")
-        if not self._record_verified_capture(
-            attempt_id,
-            capture_id,
-            to_decimal(expected),
-            quote.currency,
-            now,
-        ):
-            self.storage.set_attempt_status(
-                attempt_id, REQUIRES_REVIEW, (CAPTURE_PENDING,)
-            )
-            raise CheckoutError(
-                "PayPal capture identity could not be safely persisted"
-            )
-
-        self.storage.set_attempt_status(attempt_id, PAID, (CAPTURE_PENDING,))
-        self.storage.update_quote_status(quote.quote_id, "PAID")
-        return {
-            "attempt_id": attempt_id,
-            "status": PAID,
-            "capture_id": capture_id,
-        }
+        if not capture_id:
+            self.storage.set_attempt_status(attempt_id, REQUIRES_REVIEW, (CAPTURE_PENDING,))
+            raise CheckoutError("capture response did not include a capture identity")
+        try:
+            return self.storage.finalize_capture(attempt_id, capture_id, to_decimal(expected), quote.currency, now)
+        except DuplicateCapture as exc:
+            self.storage.set_attempt_status(attempt_id, REQUIRES_REVIEW, (CAPTURE_PENDING,))
+            raise CheckoutError("capture identity conflicts with persisted payment") from exc
 
     def cancel_before_capture(
         self, buyer_id: str, attempt_id: int, paypal_order_id: str
@@ -538,7 +504,7 @@ class CheckoutService:
             return False
         if (
             order.get("id") != paypal_order_id
-            or order.get("status") not in {"CREATED", "APPROVED"}
+            or order.get("status") not in {"CREATED", "APPROVED", "PAYER_ACTION_REQUIRED"}
             or self._captures_from_order(order)
         ):
             return False
@@ -549,11 +515,33 @@ class CheckoutService:
 
     # -- reconcile ----------------------------------------------------------
 
+    def recover_created_order(self, attempt_id: int, paypal_order_id: str) -> dict:
+        """Merchant recovery after create timed out, with strict remote correlation.
+
+        The HTTP caller must authenticate as merchant. The supplied ID alone
+        grants no trust: PayPal must echo our original quote and attempt IDs.
+        """
+        attempt = self.storage.get_attempt(attempt_id=attempt_id)
+        if attempt is None or attempt.status != REQUIRES_REVIEW or attempt.paypal_order_id:
+            raise CheckoutError('only an unlinked creation awaiting review can be recovered')
+        order = self.gateway.get_order(paypal_order_id)
+        quote = self.storage.quote_to_data(self.storage.get_quote_by_pk(attempt.cart_quote_id))
+        units = order.get('purchase_units') or []
+        if (order.get('id') != paypal_order_id or len(units) != 1
+                or units[0].get('custom_id') != str(attempt_id)
+                or units[0].get('reference_id') != quote.quote_id
+                or self._order_amount(order) != (format_money(quote.total), quote.currency)):
+            raise CheckoutError('PayPal order does not match this checkout')
+        self.storage.attach_review_order(attempt_id, paypal_order_id)
+        return self.reconcile(attempt_id)
+
     def reconcile(self, attempt_id: int) -> dict:
         """Self-heal: read the remote order and align local state."""
         attempt = self.storage.get_attempt(attempt_id=attempt_id)
         if attempt is None:
             raise CheckoutError(f"unknown attempt {attempt_id}")
+        if attempt.status == PAID:
+            return {"attempt_id": attempt_id, "status": PAID}
         if not attempt.paypal_order_id:
             self.storage.set_attempt_status(
                 attempt_id,
@@ -566,7 +554,8 @@ class CheckoutService:
                     REQUIRES_REVIEW,
                 ),
             )
-            return {"attempt_id": attempt_id, "status": REQUIRES_REVIEW}
+            current = self.storage.get_attempt(attempt_id=attempt_id)
+            return {"attempt_id": attempt_id, "status": current.status, "requires_review": True}
         order = self.gateway.get_order(attempt.paypal_order_id)
         remote_status = order.get("status")
 
@@ -582,7 +571,8 @@ class CheckoutService:
                     REQUIRES_REVIEW,
                 ),
             )
-            return {"attempt_id": attempt_id, "status": REQUIRES_REVIEW}
+            current = self.storage.get_attempt(attempt_id=attempt_id)
+            return {"attempt_id": attempt_id, "status": current.status, "requires_review": True}
 
         quote = self.storage.quote_to_data(
             self.storage.get_quote_by_pk(attempt.cart_quote_id)
@@ -594,7 +584,8 @@ class CheckoutService:
                 REQUIRES_REVIEW,
                 (ORDER_CREATED, AWAITING_BUYER_APPROVAL, APPROVED, REQUIRES_REVIEW),
             )
-            return {"attempt_id": attempt_id, "status": REQUIRES_REVIEW}
+            current = self.storage.get_attempt(attempt_id=attempt_id)
+            return {"attempt_id": attempt_id, "status": current.status, "requires_review": True}
 
         captures = self._captures_from_order(order)
         completed = next((c for c in captures if c.get("status") == "COMPLETED"), None)
@@ -604,36 +595,15 @@ class CheckoutService:
             currency = str(cap_amount.get("currency_code", ""))
             if value == format_money(quote.total) and currency == quote.currency:
                 capture_id = completed.get("id")
-                if not self._record_verified_capture(
-                    attempt_id,
-                    capture_id,
-                    to_decimal(value),
-                    currency,
-                    self.clock(),
-                ):
-                    self.storage.set_attempt_status(
-                        attempt_id,
-                        REQUIRES_REVIEW,
-                        (
-                            ORDER_CREATED,
-                            AWAITING_BUYER_APPROVAL,
-                            APPROVED,
-                            CAPTURE_PENDING,
-                            REQUIRES_REVIEW,
-                        ),
-                    )
-                    return {
-                        "attempt_id": attempt_id,
-                        "status": REQUIRES_REVIEW,
-                    }
-                self.storage.set_attempt_status(
-                    attempt_id,
-                    PAID,
-                    (ORDER_CREATED, AWAITING_BUYER_APPROVAL, APPROVED,
-                     CAPTURE_PENDING, REQUIRES_REVIEW),
-                )
-                self.storage.update_quote_status(quote.quote_id, "PAID")
-                return {"attempt_id": attempt_id, "status": PAID, "capture_id": capture_id}
+                if capture_id:
+                    try:
+                        return self.storage.finalize_capture(attempt_id, capture_id, to_decimal(value), currency, self.clock())
+                    except DuplicateCapture:
+                        pass
+                self.storage.set_attempt_status(attempt_id, REQUIRES_REVIEW,
+                    (ORDER_CREATED, AWAITING_BUYER_APPROVAL, APPROVED, CAPTURE_PENDING, REQUIRES_REVIEW))
+                current = self.storage.get_attempt(attempt_id=attempt_id)
+                return {"attempt_id": attempt_id, "status": current.status, "requires_review": True}
             self.storage.set_attempt_status(
                 attempt_id,
                 REQUIRES_REVIEW,
@@ -645,7 +615,8 @@ class CheckoutService:
                     REQUIRES_REVIEW,
                 ),
             )
-            return {"attempt_id": attempt_id, "status": REQUIRES_REVIEW}
+            current = self.storage.get_attempt(attempt_id=attempt_id)
+            return {"attempt_id": attempt_id, "status": current.status, "requires_review": True}
 
         if any(capture.get("status") == "DENIED" for capture in captures):
             self.storage.set_attempt_status(
@@ -654,7 +625,8 @@ class CheckoutService:
                 (ORDER_CREATED, AWAITING_BUYER_APPROVAL, APPROVED,
                  CAPTURE_PENDING, REQUIRES_REVIEW),
             )
-            return {"attempt_id": attempt_id, "status": FAILED}
+            current = self.storage.get_attempt(attempt_id=attempt_id)
+            return {"attempt_id": attempt_id, "status": current.status}
 
         if any(capture.get("status") == "PENDING" for capture in captures):
             self.storage.set_attempt_status(
@@ -662,7 +634,8 @@ class CheckoutService:
                 CAPTURE_PENDING,
                 (ORDER_CREATED, AWAITING_BUYER_APPROVAL, APPROVED, REQUIRES_REVIEW),
             )
-            return {"attempt_id": attempt_id, "status": CAPTURE_PENDING}
+            current = self.storage.get_attempt(attempt_id=attempt_id)
+            return {"attempt_id": attempt_id, "status": current.status}
 
         if remote_status == "COMPLETED":
             self.storage.set_attempt_status(
@@ -676,7 +649,8 @@ class CheckoutService:
                     REQUIRES_REVIEW,
                 ),
             )
-            return {"attempt_id": attempt_id, "status": REQUIRES_REVIEW}
+            current = self.storage.get_attempt(attempt_id=attempt_id)
+            return {"attempt_id": attempt_id, "status": current.status, "requires_review": True}
 
         if remote_status == "APPROVED":
             current_state = attempt.status

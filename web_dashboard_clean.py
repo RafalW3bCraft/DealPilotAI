@@ -4,7 +4,7 @@ import asyncio
 import threading
 import atexit
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, abort
+from flask import Flask, render_template, request, jsonify, abort, redirect, url_for, current_app
 from config import Config
 from database_simple import SimpleDatabaseManager
 from core.telemetry import metrics
@@ -29,12 +29,10 @@ def require_dashboard_auth(config: Config):
                 if demo:
                     return view(*args, **kwargs)  # demo mode: open, clearly labeled in UI
                 abort(404)  # fail closed: privileged route disabled
-            provided = request.headers.get('Authorization', '')
-            if not provided.startswith('Bearer '):
-                return jsonify({'error': 'authentication required'}), 401
-            import hmac
-            provided = provided[7:]
-            if not provided or not hmac.compare_digest(provided, token):
+            from web.auth import is_merchant
+            if not is_merchant(config):
+                if request.method == 'GET' and request.accept_mimetypes.accept_html and 'commerce.merchant_login' in current_app.view_functions:
+                    return redirect(url_for('commerce.merchant_login'))
                 return jsonify({'error': 'authentication required'}), 401
             return view(*args, **kwargs)
         return wrapper

@@ -3,14 +3,17 @@
 {% block content %}
 <main class="dp-page dp-receipt-page" id="main-content">
   <nav class="dp-breadcrumbs" aria-label="Breadcrumb"><a href="{{ url_for('commerce.shop') }}">Shop</a><span aria-hidden="true">/</span><span aria-current="page">{% if receipt %}Receipt{% else %}Order status{% endif %}</span></nav>
-  <section class="dp-panel dp-receipt-card" aria-labelledby="receipt-title">
+  <section id="dp-order-status" data-status="{{ order.status }}" data-requires-review="{{ 'true' if order.requires_review or order.status == 'REQUIRES_REVIEW' else 'false' }}" data-status-url="{{ url_for('commerce.order_status_json', attempt_id=order.attempt_id) if order.attempt_id else '' }}" class="dp-panel dp-receipt-card" aria-labelledby="receipt-title">
     <div class="dp-receipt-mark {% if order.status == 'PAID' %}dp-receipt-success{% else %}dp-receipt-pending{% endif %}" aria-hidden="true">
       {% if order.status == 'PAID' %}✓{% else %}…{% endif %}
     </div>
     <p class="dp-eyebrow">{% if receipt %}PAYMENT CONFIRMATION{% else %}ORDER UPDATE{% endif %}</p>
     <h1 id="receipt-title">{% if receipt %}Thank you for your order{% else %}Your order status{% endif %}</h1>
     <p class="dp-status dp-status-{{ order.status|lower }}"><span class="dp-badge">{{ order.status_label }}</span></p>
-    {% if pending %}<p class="dp-alert dp-alert-info" role="status">PayPal is still processing the payment. This page will not mark it as paid until the capture is verified.</p>{% endif %}
+    {% if order.requires_review or order.status == 'REQUIRES_REVIEW' %}<p class="dp-alert dp-alert-warn" role="alert">This payment needs merchant review. Keep your order reference and contact the merchant. Do not start another payment while its outcome is unresolved.</p>{% elif not order.is_final %}<p class="dp-alert dp-alert-info">Your payment is awaiting confirmation. Keep this order link to check progress; payment is complete only after a verified capture.</p>{% endif %}
+    <p id="dp-order-message" class="dp-form-message" role="status" aria-live="polite" aria-atomic="true"></p>
+    <button type="button" id="dp-order-refresh" class="dp-btn dp-btn-secondary">Refresh order status</button>
+    {% if order.status == 'FAILED' or order.status == 'CANCELED' %}<p class="dp-alert dp-alert-warn">This checkout did not complete. Review your order with the merchant before starting another payment.</p>{% endif %}
     <dl class="dp-dl">
       <div><dt>Order reference</dt><dd>{{ order.masked_id }}</dd></div>
       {% if order.amount %}<div><dt>Verified amount</dt><dd>{{ order.amount }} {{ order.currency }}</dd></div>{% endif %}
@@ -23,4 +26,8 @@
     <a class="dp-btn dp-btn-secondary" href="{{ url_for('commerce.shop') }}">Back to the store</a>
   </section>
 </main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='checkout/checkout.js') }}" defer></script>
 {% endblock %}

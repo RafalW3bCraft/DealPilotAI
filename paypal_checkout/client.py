@@ -131,7 +131,8 @@ class PayPalClient:
     # Orders v2
     # ------------------------------------------------------------------
 
-    def create_order(self, intent="CAPTURE", purchase_units=None, request_id=None):
+    def create_order(self, intent="CAPTURE", purchase_units=None, request_id=None,
+                     experience_context=None):
         """Create an order via POST /v2/checkout/orders.
 
         Sends a PayPal-Request-Id header for idempotency (a uuid4 is
@@ -143,6 +144,8 @@ class PayPalClient:
         "10.00") — they are passed through verbatim, never as floats.
         """
         payload = {"intent": intent, "purchase_units": purchase_units or []}
+        if experience_context is not None:
+            payload['payment_source'] = {'paypal': {'experience_context': experience_context}}
         return self._authed_request(
             "POST",
             "/v2/checkout/orders",

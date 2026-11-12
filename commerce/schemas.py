@@ -44,7 +44,10 @@ class CatalogProduct(BaseModel):
     @field_validator("price", mode="before")
     @classmethod
     def _price_decimal(cls, v):
-        return to_decimal(v)
+        amount = to_decimal(v)
+        if not amount.is_finite() or amount <= 0:
+            raise ValueError('catalog price must be a finite positive amount')
+        return amount
 
     @field_validator("currency")
     @classmethod

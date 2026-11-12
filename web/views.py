@@ -153,7 +153,7 @@ def order_vm(attempt, capture=None):
         'amount': money_str(amount) if amount not in (None, '') else '',
         'currency': str(currency or ''),
         'capture_id': capture_id,
-        'verified': bool(verified_at),
+        'verified': bool(verified_at) and status == 'PAID',
         'verified_at': iso(verified_at),
         'created_at': iso(_get(attempt, 'created_at', None)),
         'updated_at': iso(_get(attempt, 'updated_at', None)),

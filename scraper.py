@@ -12,6 +12,7 @@ from typing import List, Optional, Dict, Tuple
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from models import Product
+from core.affiliate_policy import scraping_allowed, amazon_url_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +20,10 @@ logger = logging.getLogger(__name__)
 class DealScraper:
     """Real-time Amazon deal scraper with no mock data."""
     
-    def __init__(self, max_deals_per_source: int = 5, request_timeout: int = 30):
+    def __init__(self, max_deals_per_source: int = 5, request_timeout: int = 30, config=None):
         """Initialize scraper with configuration."""
         self.max_deals_per_source = max_deals_per_source
+        self.config = config
         self.request_timeout = request_timeout
         self.session = None
         # Prioritize deal pages over generic search results
@@ -68,6 +70,8 @@ class DealScraper:
             
     async def scrape_real_amazon_deals(self) -> List[Product]:
         """Scrape real Amazon deals from multiple sources, prioritizing latest and catchy deals."""
+        if not scraping_allowed(self.config):
+            return []
         if not self.session:
             await self.initialize()
             
@@ -152,6 +156,8 @@ class DealScraper:
         min_reviews: int = 50
     ) -> List[Product]:
         """Search Amazon products by keyword with affiliate tag."""
+        if not scraping_allowed(self.config):
+            return []
         if not self.session:
             await self.initialize()
         
@@ -221,6 +227,8 @@ class DealScraper:
     
     async def _scrape_source(self, url: str) -> List[Product]:
         """Scrape deals from a specific Amazon source with improved error handling and rate limiting."""
+        if not scraping_allowed(self.config) or not amazon_url_allowed(url):
+            return []
         if not self.session:
             logger.error("Session not initialized")
             return []
@@ -230,7 +238,7 @@ class DealScraper:
         
         for attempt in range(max_retries):
             try:
-                async with self.session.get(url) as response:
+                async with self.session.get(url, allow_redirects=False) as response:
                     if response.status == 429:
                         retry_delay = min(retry_delay * 2, 60)  # Exponential backoff, max 60s
                         logger.warning(f"Rate limited by {url}, waiting {retry_delay}s (attempt {attempt + 1}/{max_retries})")
@@ -765,6 +773,8 @@ class DealScraper:
     
     async def scrape_specific_deal(self, url: str) -> Optional[Product]:
         """Scrape a specific Amazon product from URL with validation."""
+        if not scraping_allowed(self.config) or not amazon_url_allowed(url):
+            return None
         if not self.session:
             await self.initialize()
         
@@ -799,7 +809,7 @@ class DealScraper:
         try:
             logger.info(f"Scraping specific deal from: {url}")
             
-            async with self.session.get(url) as response:
+            async with self.session.get(url, allow_redirects=False) as response:
                 if response.status != 200:
                     logger.warning(f"HTTP {response.status} for {url}")
                     return None

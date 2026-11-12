@@ -17,7 +17,7 @@
                         <p class="mb-0 cyber-subtitle">REAL-TIME AFFILIATE OPERATIONS STATUS</p>
                     </div>
                     <div class="col-md-4 text-end">
-                        <button class="btn cyber-btn-primary" onclick="refreshDashboard()">
+                        <button class="btn cyber-btn-primary" id="refresh-dashboard">
                             <i class="fas fa-sync-alt me-1"></i>REFRESH DATA
                         </button>
                     </div>
@@ -40,7 +40,7 @@
                     <div class="col-md-4">
                         <div class="cyber-stat">
                             <i class="fas fa-circle me-2 status-online"></i>
-                            Status: <span class="cyber-highlight">OPERATIONAL</span>
+                            Data: <span class="cyber-highlight">AFFILIATE ANALYTICS</span>
                         </div>
                     </div>
                 </div>
@@ -188,7 +188,7 @@
                                 <th>CLICKS</th>
                                 <th>CONVERSIONS</th>
                                 <th>EARNINGS</th>
-                                <th>STATUS</th>
+                                <th>POSTED</th>
                             </tr>
                         </thead>
                         <tbody id="deals-table">
@@ -206,24 +206,3 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
-<script>
-// Initialize dashboard on load
-document.addEventListener('DOMContentLoaded', function() {
-    loadDashboardData();
-    
-    // Auto-refresh every 30 seconds
-    setInterval(loadDashboardData, 30000);
-});
-
-function refreshDashboard() {
-    const btn = document.querySelector('[onclick="refreshDashboard()"]');
-    const icon = btn.querySelector('i');
-    
-    icon.classList.add('fa-spin');
-    loadDashboardData().finally(() => {
-        icon.classList.remove('fa-spin');
-    });
-}
-</script>
-{% endblock %}

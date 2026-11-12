@@ -85,9 +85,10 @@ class FakeGateway:
         self.tamper_order_amount: str | None = None
         self.remote_completed_after_timeout = False
 
-    def create_order(self, intent, purchase_units, request_id):
+    def create_order(self, intent, purchase_units, request_id, experience_context=None):
         self.create_calls.append(
-            {"intent": intent, "purchase_units": purchase_units, "request_id": request_id}
+            {"intent": intent, "purchase_units": purchase_units, "request_id": request_id,
+             "experience_context": experience_context}
         )
         if self.create_error:
             raise self.create_error
@@ -380,7 +381,8 @@ def test_actual_paypal_ambiguous_errors_on_capture_require_reconciliation(
         env.checkout.capture_after_approval("actor-1", started["attempt_id"], BUYER)
     attempt = env.storage.get_attempt(attempt_id=started["attempt_id"])
     assert attempt.status == REQUIRES_REVIEW
-    assert env.gateway.capture_calls[0]["request_id"] == f"capture-{attempt.id}"
+    assert env.gateway.capture_calls[0]["request_id"] == attempt.capture_request_id
+    assert attempt.capture_request_id
 
 
 def test_paypal_auth_failure_on_capture_is_not_a_payment_rejection(env):

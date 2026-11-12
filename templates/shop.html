@@ -58,13 +58,24 @@
       <div><p class="dp-eyebrow">HANDPICKED FOR YOU</p><h2 id="catalog-title">Explore the catalog</h2></div>
       <span class="dp-catalog-count">{{ products|length }} products</span>
     </div>
+    {% if not checkout_enabled|default(true) %}<p class="dp-alert dp-alert-info" role="status">Merchant checkout is currently unavailable. You can browse and prepare a cart; payment requires configured PayPal sandbox access.</p>{% endif %}
     <form id="dp-quote-form" method="post" action="{{ url_for('commerce.cart_quote') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="dp-grid" id="dp-grid">
         {% for p in products %}
         <article class="dp-card">
           <div class="dp-card-art dp-card-art-{{ loop.index % 4 }}" aria-hidden="true">
-            <span>{{ '%02d'|format(loop.index) }}</span><span class="dp-card-spark">✦</span>
+            <svg class="dp-product-illustration" viewBox="0 0 160 110" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+              {% if 'LAMP' in p.sku %}<path d="M49 94h65M80 93V59l22-34M85 18l34 20-13 21-34-20z"/><path d="M92 63l-7 8m21-7v11" stroke-width="2"/>
+              {% elif 'TRAY' in p.sku %}<path d="M30 45h100v21H30zM39 74h100v21H39zM41 45V22h77v23M51 74v-8m66 8v-8"/>
+              {% elif 'STAND' in p.sku %}<path d="M35 72h90l8 12H27zM42 84v13m75-13v13M48 17h64v43H48zM80 60v12"/>
+              {% elif 'CABLE' in p.sku %}<path d="M38 29h28v16H38zM94 69h28v16H94zM66 37h21c32 0 26 40 7 40H64c-28 0-35-18-22-26M30 32h8m-8 10h8m84 31h8m-8 9h8"/>
+              {% elif 'PAD' in p.sku %}<path d="M40 23h81l10 62c1 8-4 13-13 13H42c-9 0-14-5-13-13z"/><ellipse cx="80" cy="79" rx="31" ry="11"/><rect x="68" y="33" width="24" height="33" rx="12"/><path d="M80 35v9"/>
+              {% elif 'WBOARD' in p.sku %}<path d="M31 18h98v70H31zM46 99h68M63 88l-5 11m39-11 5 11M48 37h60M48 51h40M48 65h49"/>
+              {% elif 'HUB' in p.sku %}<rect x="33" y="45" width="93" height="37" rx="9"/><path d="M47 57h12v10H47zM70 57h12v10H70zM95 59h17M79 45V29c0-12 21-12 21 0v4"/>
+              {% elif 'PLANT' in p.sku %}<path d="M53 67h54l-9 32H62zM80 67V32M80 51c-28 0-33-22-33-22s29-1 33 22zM80 41c24 0 29-25 29-25s-27 0-29 25z"/>
+              {% else %}<path d="M42 35h76v61H42zM42 35l38-20 38 20M80 16v80M42 35l38 20 38-20"/>{% endif %}
+            </svg>
           </div>
           <div class="dp-card-meta"><span class="dp-badge">{{ p.category }}</span><span class="dp-card-sku">{{ p.sku }}</span></div>
           <h3 class="dp-card-title">{{ p.title }}</h3>
@@ -78,12 +89,12 @@
           </div>
           <div class="dp-card-actions">
             <label class="dp-add-label">
-              <input type="checkbox" name="sel" value="{{ p.sku }}" data-sku="{{ p.sku }}" {% if p.stock <= 0 %}disabled{% endif %}>
+              <input type="checkbox" name="sel" value="{{ p.sku }}" data-sku="{{ p.sku }}" {% if p.stock <= 0 or not cart_enabled|default(true) %}disabled{% endif %}>
               <span>{{ labels.add_to_cart }}</span>
             </label>
             <label class="dp-qty-label">{{ labels.quantity }}
               <input type="number" name="qty_{{ p.sku }}" min="1" max="{{ [10, p.stock]|min if p.stock > 0 else 1 }}" value="1"
-                     aria-label="{{ labels.quantity }} {{ p.title }}" {% if p.stock <= 0 %}disabled{% endif %}>
+                     aria-label="{{ labels.quantity }} {{ p.title }}" {% if p.stock <= 0 or not cart_enabled|default(true) %}disabled{% endif %}>
             </label>
           </div>
         </article>
@@ -93,7 +104,7 @@
       </div>
       <div class="dp-catalog-actions">
         <p>Every cart total is calculated from current merchant prices.</p>
-        <button type="submit" class="dp-btn dp-btn-primary">{{ labels.view_cart }} <span aria-hidden="true">→</span></button>
+        <button type="submit" class="dp-btn dp-btn-primary" {% if not products or not cart_enabled|default(true) %}disabled{% endif %}>{{ labels.view_cart }} <span aria-hidden="true">→</span></button>
       </div>
       <p id="dp-quote-msg" class="dp-form-message" role="status" aria-live="polite"></p>
     </form>

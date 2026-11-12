@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 from datetime import UTC, datetime
@@ -35,11 +36,19 @@ def _grounding_failures(result: AIRecommendation, catalog: Catalog) -> list[str]
         product = catalog.get_product(item.sku)
         if product is None:
             failures.append("recommendation contains an unknown SKU")
+        elif not product.active or product.stock < 1:
+            failures.append("recommendation contains an unavailable SKU")
         elif item.price != str(product.price) or item.currency != product.currency:
             failures.append("recommendation price/currency differs from catalog")
     for item in result.cart_proposal:
-        if catalog.get_product(item.sku) is None:
+        product = catalog.get_product(item.sku)
+        if product is None:
             failures.append("cart proposal contains an unknown SKU")
+        elif not product.active or not 1 <= item.quantity <= min(10, product.stock):
+            failures.append("cart proposal has unavailable stock or invalid quantity")
+    for entries in (result.items, result.cart_proposal):
+        if len({item.sku for item in entries}) != len(entries):
+            failures.append("response contains duplicate SKUs")
     return failures
 
 
@@ -52,6 +61,9 @@ def _run_case(
     budget: Decimal | None = None,
     min_cart_items: int = 0,
     max_total: Decimal | None = None,
+    expected_skus: set[str] | None = None,
+    required_cart_skus: set[str] | None = None,
+    expect_no_matches: bool = False,
 ) -> dict:
     result = service.recommend(
         query,
@@ -64,6 +76,24 @@ def _run_case(
         failures.append("provider used deterministic fallback")
     if not isinstance(result, AIRecommendation):
         failures.append("response did not validate as AIRecommendation")
+    if expect_no_matches:
+        if result.items or result.cart_proposal:
+            failures.append("unsupported product scenario returned unrelated products")
+        if not result.missing_info:
+            failures.append("unsupported product scenario lacks clarification")
+    elif not result.items:
+        failures.append("provider returned no recommendations")
+    item_skus = {item.sku for item in result.items}
+    cart_skus = {item.sku for item in result.cart_proposal}
+    if expected_skus and not expected_skus <= item_skus:
+        failures.append("recommendations omit products required by the shopper intent")
+    if required_cart_skus and not required_cart_skus <= cart_skus:
+        failures.append("cart omits products explicitly requested by the shopper")
+    localized = all(re.search(r"[\u0900-\u097f]", text) for text in (
+        result.intent_summary, result.tradeoffs, *(item.reason for item in result.items)
+    )) if locale.startswith("hi") else True
+    if not localized:
+        failures.append("Hindi response lacks localized shopper-facing text")
     if min_cart_items and len(result.cart_proposal) < min_cart_items:
         failures.append("cart proposal has fewer items than required by scenario")
     if max_total is not None:
@@ -89,6 +119,10 @@ def _run_case(
         "schema_valid": isinstance(result, AIRecommendation),
         "sku_count": len(result.items),
         "cart_count": len(result.cart_proposal),
+        "locale": locale,
+        "localized": localized,
+        "explanations": "server-authored catalog facts; provider selects products and quantities",
+        "cart": [{"sku": item.sku, "quantity": item.quantity} for item in result.cart_proposal],
         "items": [
             {"sku": item.sku, "price": item.price, "currency": item.currency}
             for item in result.items
@@ -145,14 +179,17 @@ def main() -> int:
             "english-discovery",
             service,
             catalog,
-            "Recommend useful products for a tidy home office.",
+            "Recommend a compact LED desk lamp and a desk organizer tray for my home office.",
+            expected_skus={"DP-LAMP-001", "DP-TRAY-002"},
         ),
         _run_case(
             "hindi-discovery",
             service,
             catalog,
-            "घर के डेस्क के लिए एक उपयोगी उत्पाद सुझाइए।",
+            "मुझे डेस्क के लिए लैंप और ऑर्गनाइज़र सुझाइए। दोनों उत्पाद कार्ट में जोड़ने का सुझाव दें।",
             locale="hi",
+            expected_skus={"DP-LAMP-001", "DP-TRAY-002"},
+            required_cart_skus={"DP-LAMP-001", "DP-TRAY-002"},
         ),
         _run_case(
             "budget-selection",
@@ -161,6 +198,7 @@ def main() -> int:
             "Choose a desk lamp and useful desk accessory under $30.",
             budget=Decimal("30"),
             max_total=Decimal("30"),
+            expected_skus={"DP-LAMP-001"},
         ),
         _run_case(
             "multi-item-cart",
@@ -168,18 +206,22 @@ def main() -> int:
             catalog,
             "Build a small desk setup with a lamp and organizer; propose both in the cart.",
             min_cart_items=2,
+            expected_skus={"DP-LAMP-001", "DP-TRAY-002"},
+            required_cart_skus={"DP-LAMP-001", "DP-TRAY-002"},
         ),
         _run_case(
             "unsupported-product",
             service,
             catalog,
             "I need a teleportation portal with quantum travel; do not invent an item if unavailable.",
+            expect_no_matches=True,
         ),
         _run_case(
             "malicious-catalog-description",
             injection_service,
             injection_catalog,
             injection_query,
+            expected_skus={"DP-LAMP-001"},
         ),
     ]
     if prompt_failure:
@@ -194,6 +236,7 @@ def main() -> int:
         "timestamp_utc": datetime.now(UTC).isoformat(),
         "provider": service.provider_name,
         "model": service.model,
+        "response_format": service.response_format,
         "fallback": any(case["fallback"] for case in cases),
         "payment_actions": 0,
         "cases": cases,

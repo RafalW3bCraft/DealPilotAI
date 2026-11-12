@@ -17,7 +17,7 @@
                         <p class="mb-0 cyber-subtitle">ACTIVE DEAL MONITORING & ANALYTICS</p>
                     </div>
                     <div class="col-md-4 text-end">
-                        <button class="btn cyber-btn-primary" onclick="refreshDeals()">
+                        <button class="btn cyber-btn-primary" id="refresh-deals">
                             <i class="fas fa-sync-alt me-1"></i>REFRESH
                         </button>
                     </div>
@@ -75,7 +75,7 @@
                 <div class="row">
                     <div class="col-md-3">
                         <label class="form-label cyber-stat-label">CATEGORY FILTER</label>
-                        <select class="form-select" id="categoryFilter" onchange="filterDeals()">
+                        <select class="form-select" id="categoryFilter">
                             <option value="">ALL CATEGORIES</option>
                             <option value="electronics">ELECTRONICS</option>
                             <option value="home">HOME & KITCHEN</option>
@@ -85,7 +85,7 @@
                     </div>
                     <div class="col-md-3">
                         <label class="form-label cyber-stat-label">TIME RANGE</label>
-                        <select class="form-select" id="timeFilter" onchange="filterDeals()">
+                        <select class="form-select" id="timeFilter">
                             <option value="24">LAST 24 HOURS</option>
                             <option value="72">LAST 3 DAYS</option>
                             <option value="168">LAST WEEK</option>
@@ -94,7 +94,7 @@
                     </div>
                     <div class="col-md-3">
                         <label class="form-label cyber-stat-label">SORT BY</label>
-                        <select class="form-select" id="sortFilter" onchange="filterDeals()">
+                        <select class="form-select" id="sortFilter">
                             <option value="posted_at">NEWEST FIRST</option>
                             <option value="earnings">HIGHEST EARNINGS</option>
                             <option value="clicks">MOST CLICKS</option>
@@ -103,7 +103,7 @@
                     </div>
                     <div class="col-md-3">
                         <label class="form-label cyber-stat-label">STATUS</label>
-                        <select class="form-select" id="statusFilter" onchange="filterDeals()">
+                        <select class="form-select" id="statusFilter">
                             <option value="">ALL STATUS</option>
                             <option value="active">ACTIVE</option>
                             <option value="hot">HOT DEALS</option>
@@ -164,221 +164,128 @@
 
 {% block scripts %}
 <script>
+(() => {
 let allDeals = [];
-let filteredDeals = [];
+let loading = false;
+const tableBody = document.getElementById('deals-table-body');
+const text = value => String(value ?? '');
+const number = value => Number.isFinite(Number(value)) ? Number(value) : 0;
+const money = value => `$${number(value).toFixed(2)}`;
+const amazonDomains = ['amazon.com', 'amazon.co.uk', 'amazon.de', 'amazon.fr',
+    'amazon.it', 'amazon.es', 'amazon.ca', 'amazon.com.au', 'amazon.co.jp',
+    'amazon.in', 'amazon.com.br', 'amazon.com.mx', 'amazon.nl', 'amazon.pl',
+    'amazon.se', 'amazon.com.be', 'amazon.ie', 'amazon.ae', 'amazon.sa',
+    'amazon.sg', 'amazon.com.tr', 'amazon.co.za'];
 
-document.addEventListener('DOMContentLoaded', function() {
-    loadDealsData();
-    setInterval(loadDealsData, 60000); // Refresh every minute
-});
-
-async function loadDealsData() {
+function affiliateURL(value) {
     try {
-        const response = await fetch('/api/deals?hours=168&limit=100');
-        if (!response.ok) throw new Error('Failed to load deals');
-        
-        allDeals = await response.json();
-        filteredDeals = [...allDeals];
-        
-        updateDealsStats();
-        updateDealsTable();
-        
-    } catch (error) {
-        console.error('Error loading deals:', error);
-        showErrorMessage('Failed to load deals data');
-    }
+        const url = new URL(text(value));
+        if (url.protocol !== 'https:' || url.username || url.password || url.port) return null;
+        if (!amazonDomains.some(domain => url.hostname === domain || url.hostname.endsWith('.' + domain))) return null;
+        return url.href;
+    } catch { return null; }
 }
-
-function updateDealsStats() {
-    if (!allDeals.length) return;
-    
-    // Calculate statistics
-    const hotDeals = allDeals.filter(deal => deal.clicks > 30).length;
-    const topEarner = Math.max(...allDeals.map(d => d.earnings));
-    const latestDeal = allDeals.length > 0 ? formatTimeAgo(new Date(allDeals[0].posted_at)) : '--';
-    const avgDiscount = allDeals.length > 0 ? 
-        allDeals.reduce((sum, deal) => sum + parseFloat(deal.discount.replace(/[^\d.]/g, '')), 0) / allDeals.length : 0;
-    
-    document.getElementById('hot-deals-count').textContent = hotDeals;
-    document.getElementById('top-earnings').textContent = `$${topEarner.toFixed(2)}`;
-    document.getElementById('latest-deal').textContent = latestDeal;
-    document.getElementById('avg-discount').textContent = `${avgDiscount.toFixed(1)}%`;
+function statusFor(deal) {
+    const age = (Date.now() - new Date(deal.posted_at)) / 3600000;
+    if (age < 2) return ['NEW', 'bg-primary'];
+    if (number(deal.clicks) > 30) return ['HOT', 'bg-danger'];
+    if (number(deal.conversions) > 0) return ['CONVERTING', 'bg-success'];
+    return age < 24 ? ['ACTIVE', 'bg-info'] : ['COOLING', 'bg-secondary'];
 }
-
-function updateDealsTable() {
-    const tableBody = document.getElementById('deals-table-body');
-    const dealsCount = document.getElementById('deals-count');
-    
-    if (!filteredDeals.length) {
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="10" class="text-center cyber-loading">
-                    <i class="fas fa-exclamation-triangle me-2"></i>NO DEALS FOUND
-                </td>
-            </tr>
-        `;
-        dealsCount.textContent = '0 DEALS';
-        return;
-    }
-    
-    dealsCount.textContent = `${filteredDeals.length} DEALS`;
-    
-    const rows = filteredDeals.map(deal => {
-        const status = getDealsStatus(deal);
-        const timeAgo = formatTimeAgo(new Date(deal.posted_at));
-        
-        return `
-            <tr class="fade-in">
-                <td>
-                    <div class="fw-bold">${truncateText(deal.title, 35)}</div>
-                    <small class="text-muted">ASIN: ${extractASIN(deal.affiliate_link)}</small>
-                </td>
-                <td>
-                    <span class="badge bg-secondary">${deal.category}</span>
-                </td>
-                <td class="fw-bold cyber-highlight">${deal.price}</td>
-                <td>
-                    <span class="badge bg-success">${deal.discount}</span>
-                </td>
-                <td class="text-center fw-bold">${deal.clicks}</td>
-                <td class="text-center fw-bold text-success">${deal.conversions}</td>
-                <td class="text-center fw-bold text-warning">$${deal.earnings.toFixed(2)}</td>
-                <td>
-                    <small>${timeAgo}</small>
-                </td>
-                <td>
-                    <span class="badge ${status.class}">${status.text}</span>
-                </td>
-                <td>
-                    <button class="btn btn-sm cyber-btn-primary" onclick="viewDeal('${deal.id}')">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-info ms-1" onclick="copyLink('${deal.affiliate_link}')">
-                        <i class="fas fa-copy"></i>
-                    </button>
-                </td>
-            </tr>
-        `;
-    }).join('');
-    
-    tableBody.innerHTML = rows;
+function message(value) {
+    tableBody.replaceChildren();
+    const cell = tableBody.insertRow().insertCell();
+    cell.colSpan = 10;
+    cell.className = 'text-center cyber-loading';
+    cell.textContent = value;
 }
-
-function filterDeals() {
+function render() {
     const category = document.getElementById('categoryFilter').value;
-    const timeHours = parseInt(document.getElementById('timeFilter').value);
-    const sortBy = document.getElementById('sortFilter').value;
+    const hours = Number(document.getElementById('timeFilter').value);
     const status = document.getElementById('statusFilter').value;
-    
-    // Apply filters
-    filteredDeals = allDeals.filter(deal => {
-        if (category && deal.category !== category) return false;
-        
-        const dealTime = new Date(deal.posted_at);
-        const cutoffTime = new Date(Date.now() - timeHours * 60 * 60 * 1000);
-        if (dealTime < cutoffTime) return false;
-        
-        if (status) {
-            const dealStatus = getDealsStatus(deal);
-            if (status === 'hot' && deal.clicks <= 30) return false;
-            if (status === 'new' && dealStatus.text !== 'NEW') return false;
-            if (status === 'active' && dealStatus.text === 'INACTIVE') return false;
-        }
-        
-        return true;
+    const sort = document.getElementById('sortFilter').value;
+    const deals = allDeals.filter(deal => {
+        const badge = statusFor(deal)[0];
+        return (!category || category === deal.category) &&
+            new Date(deal.posted_at).getTime() >= Date.now() - hours * 3600000 &&
+            (!status || (status === 'hot' && badge === 'HOT') ||
+             (status === 'new' && badge === 'NEW') || (status === 'active' && badge !== 'COOLING'));
     });
-    
-    // Apply sorting
-    filteredDeals.sort((a, b) => {
-        switch (sortBy) {
-            case 'earnings':
-                return b.earnings - a.earnings;
-            case 'clicks':
-                return b.clicks - a.clicks;
-            case 'conversions':
-                return b.conversions - a.conversions;
-            default: // posted_at
-                return new Date(b.posted_at) - new Date(a.posted_at);
-        }
-    });
-    
-    updateDealsTable();
-}
-
-function getDealsStatus(deal) {
-    const hoursOld = (Date.now() - new Date(deal.posted_at)) / (1000 * 60 * 60);
-    
-    if (hoursOld < 2) return { text: 'NEW', class: 'bg-primary' };
-    if (deal.clicks > 30) return { text: 'HOT', class: 'bg-danger' };
-    if (deal.conversions > 0) return { text: 'CONVERTING', class: 'bg-success' };
-    if (hoursOld < 24) return { text: 'ACTIVE', class: 'bg-info' };
-    return { text: 'COOLING', class: 'bg-secondary' };
-}
-
-function extractASIN(link) {
-    const match = link.match(/\/dp\/([A-Z0-9]{10})/);
-    return match ? match[1] : 'Unknown';
-}
-
-function viewDeal(dealId) {
-    const deal = allDeals.find(d => d.id == dealId);
-    if (!deal) return;
-    
-    alert(`Deal Details:\n\nTitle: ${deal.title}\nPrice: ${deal.price}\nDiscount: ${deal.discount}\nClicks: ${deal.clicks}\nConversions: ${deal.conversions}\nEarnings: $${deal.earnings.toFixed(2)}`);
-}
-
-function copyLink(link) {
-    navigator.clipboard.writeText(link).then(() => {
-        showNotification('Affiliate link copied to clipboard', 'success');
-    }).catch(() => {
-        showNotification('Failed to copy link', 'error');
+    deals.sort((a, b) => sort === 'posted_at' ? new Date(b.posted_at) - new Date(a.posted_at) : number(b[sort]) - number(a[sort]));
+    document.getElementById('deals-count').textContent = `${deals.length} DEALS`;
+    tableBody.replaceChildren();
+    if (!deals.length) { message('No deals found for these filters.'); return; }
+    deals.forEach(deal => {
+        const row = tableBody.insertRow();
+        const title = row.insertCell();
+        const name = document.createElement('div');
+        name.className = 'fw-bold';
+        name.textContent = text(deal.title);
+        title.append(name);
+        const safeLink = affiliateURL(deal.affiliate_link);
+        const asin = safeLink ? new URL(safeLink).pathname.match(/\/dp\/([A-Z0-9]{10})/) : null;
+        const detail = document.createElement('small');
+        detail.textContent = `ASIN: ${asin ? asin[1] : 'Unknown'}`;
+        title.append(detail);
+        [deal.category, deal.price, deal.discount, number(deal.clicks),
+            number(deal.conversions), money(deal.earnings),
+            Number.isFinite(new Date(deal.posted_at).getTime()) ? new Date(deal.posted_at).toLocaleString() : 'Unknown'
+        ].forEach(value => { row.insertCell().textContent = text(value); });
+        const badge = document.createElement('span');
+        const [label, style] = statusFor(deal);
+        badge.className = `badge ${style}`;
+        badge.textContent = label;
+        row.insertCell().append(badge);
+        const actions = row.insertCell();
+        const view = document.createElement('button');
+        view.type = 'button';
+        view.className = 'btn btn-sm cyber-btn-primary';
+        view.textContent = 'View';
+        view.addEventListener('click', () => alert(`Title: ${text(deal.title)}\nPrice: ${text(deal.price)}\nDiscount: ${text(deal.discount)}`));
+        const copy = document.createElement('button');
+        copy.type = 'button';
+        copy.className = 'btn btn-sm btn-outline-info ms-1';
+        copy.textContent = 'Copy affiliate link';
+        copy.disabled = !safeLink;
+        copy.title = safeLink ? 'Copy validated Amazon affiliate link' : 'Affiliate link unavailable or invalid';
+        copy.addEventListener('click', async () => {
+            if (!safeLink) return;
+            try { await navigator.clipboard.writeText(safeLink); copy.textContent = 'Copied'; }
+            catch { copy.textContent = 'Copy unavailable'; }
+        });
+        actions.append(view, copy);
     });
 }
-
-function refreshDeals() {
-    const btn = document.querySelector('[onclick="refreshDeals()"]');
-    const icon = btn.querySelector('i');
-    
-    icon.classList.add('fa-spin');
-    loadDealsData().finally(() => {
-        icon.classList.remove('fa-spin');
-    });
+function updateStats() {
+    document.getElementById('hot-deals-count').textContent = allDeals.filter(deal => number(deal.clicks) > 30).length;
+    document.getElementById('top-earnings').textContent = money(Math.max(0, ...allDeals.map(deal => number(deal.earnings))));
+    const latest = allDeals.map(deal => new Date(deal.posted_at).getTime()).filter(Number.isFinite);
+    document.getElementById('latest-deal').textContent = latest.length ? new Date(Math.max(...latest)).toLocaleDateString() : '--';
+    const discounts = allDeals.map(deal => Number.parseFloat(text(deal.discount).replace(/[^\d.]/g, ''))).filter(Number.isFinite);
+    document.getElementById('avg-discount').textContent = discounts.length ? `${(discounts.reduce((sum, value) => sum + value, 0) / discounts.length).toFixed(1)}%` : '--';
 }
-
-function showErrorMessage(message) {
-    document.getElementById('deals-table-body').innerHTML = `
-        <tr>
-            <td colspan="10" class="text-center cyber-loading">
-                <i class="fas fa-exclamation-triangle me-2"></i>${message}
-            </td>
-        </tr>
-    `;
+async function load() {
+    if (loading) return;
+    loading = true;
+    const refresh = document.getElementById('refresh-deals');
+    refresh.disabled = true;
+    try {
+        const hours = document.getElementById('timeFilter').value;
+        const response = await fetch(`/api/deals?hours=${hours}&limit=100`);
+        if (!response.ok) throw new Error('Deals unavailable');
+        const payload = await response.json();
+        if (!Array.isArray(payload)) throw new Error('Invalid deals response');
+        allDeals = payload;
+        updateStats();
+        render();
+    } catch { message('Deals unavailable. Sign in as a merchant and try refreshing.'); }
+    finally { loading = false; refresh.disabled = false; }
 }
-
-// Utility functions
-function formatTimeAgo(date) {
-    const now = new Date();
-    const diffMs = now - date;
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    
-    if (diffHours > 24) return `${Math.floor(diffHours / 24)}d ago`;
-    if (diffHours > 0) return `${diffHours}h ago`;
-    if (diffMins > 0) return `${diffMins}m ago`;
-    return 'Just now';
-}
-
-function truncateText(text, maxLength) {
-    return text.length <= maxLength ? text : text.substring(0, maxLength) + '...';
-}
-
-function showNotification(message, type = 'info') {
-    // Use the notification system from dashboard.js
-    if (typeof window.showNotification === 'function') {
-        window.showNotification(message, type);
-    } else {
-        alert(message);
-    }
-}
+document.getElementById('refresh-deals').addEventListener('click', load);
+['categoryFilter', 'sortFilter', 'statusFilter'].forEach(id => document.getElementById(id).addEventListener('change', render));
+document.getElementById('timeFilter').addEventListener('change', load);
+load();
+setInterval(load, 60000);
+})();
 </script>
 {% endblock %}

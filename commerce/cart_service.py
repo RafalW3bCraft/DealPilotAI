@@ -130,6 +130,8 @@ class CartService:
             product = self.catalog.get_product(line.sku)
             if product is None:
                 raise QuoteStale(f"sku {line.sku!r} no longer in catalog")
+            if not product.active or product.price != line.unit_price or product.currency != quote.currency:
+                raise QuoteStale(f"sku {line.sku!r} availability, price or currency changed")
             if product.version != line.version:
                 raise QuoteStale(
                     f"sku {line.sku!r} version changed "

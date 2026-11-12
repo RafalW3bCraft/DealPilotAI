@@ -1,3 +1,6 @@
+(() => {
+// base.html includes this asset on all legacy pages; initialize only the dashboard.
+if (!document.getElementById("deals-table")) return;
 /* Modern Cyber Dashboard JavaScript - RafalW3bCraft - Fixed Canvas Version */
 
 // Global variables
@@ -18,11 +21,8 @@ const cyberColors = {
 // Initialize dashboard
 async function loadDashboardData() {
     try {
-        await Promise.all([
-            loadStatistics(),
-            loadDeals(),
-            updateCharts()
-        ]);
+        await Promise.all([loadStatistics(), loadDeals()]);
+        await updateCharts();
     } catch (error) {
         console.error('Dashboard load error:', error);
         showNotification('System connection error', 'error');
@@ -287,47 +287,29 @@ function updateStatWithAnimation(elementId, value) {
 
 // Update deals table
 function updateDealsTable(deals) {
-    const tableBody = document.querySelector('#deals-table tbody');
+    const tableBody = document.getElementById('deals-table');
     if (!tableBody) return;
     
-    tableBody.innerHTML = '';
-    
-    if (!deals || deals.length === 0) {
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="6" class="text-center text-muted">
-                    <i class="fas fa-info-circle"></i> No deals available
-                </td>
-            </tr>
-        `;
+    tableBody.replaceChildren();
+    const count = document.getElementById('deal-count');
+    if (count) count.textContent = `${Array.isArray(deals) ? deals.length : 0} RECENT`;
+    if (!Array.isArray(deals) || !deals.length) {
+        const row = tableBody.insertRow();
+        const cell = row.insertCell();
+        cell.colSpan = 8;
+        cell.textContent = 'No deals available';
         return;
     }
-    
     deals.slice(0, 10).forEach(deal => {
-        const row = document.createElement('tr');
+        const row = tableBody.insertRow();
         row.className = 'deal-row';
-        
-        row.innerHTML = `
-            <td>
-                <div class="deal-title">${deal.title || 'N/A'}</div>
-                <small class="text-muted">ASIN: ${deal.asin || 'N/A'}</small>
-            </td>
-            <td class="text-success font-weight-bold">${deal.price || 'N/A'}</td>
-            <td class="text-warning">${deal.discount || 'N/A'}</td>
-            <td>
-                <span class="badge badge-success">${deal.category || 'general'}</span>
-            </td>
-            <td class="text-center">${deal.clicks || 0}</td>
-            <td class="text-center">${deal.conversions || 0}</td>
-            <td class="text-success">$${deal.earnings ? deal.earnings.toFixed(2) : '0.00'}</td>
-            <td>
-                <span class="badge ${deal.is_active ? 'badge-success' : 'badge-secondary'}">
-                    ${deal.is_active ? 'ACTIVE' : 'INACTIVE'}
-                </span>
-            </td>
-        `;
-        
-        tableBody.appendChild(row);
+        const earnings = Number(deal.earnings);
+        const values = [deal.title || 'N/A', deal.price || 'N/A',
+            deal.discount || 'N/A', deal.category || 'general',
+            deal.clicks || 0, deal.conversions || 0,
+            `$${Number.isFinite(earnings) ? earnings.toFixed(2) : '0.00'}`,
+            deal.posted_at ? new Date(deal.posted_at).toLocaleString() : 'Unknown'];
+        values.forEach(value => { row.insertCell().textContent = String(value); });
     });
 }
 
@@ -355,8 +337,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initial load
     loadDashboardData();
     
-    // Refresh data every 30 seconds
+    // Exactly one refresh loop owns this page.
     setInterval(loadDashboardData, 30000);
+    document.getElementById('refresh-dashboard').addEventListener('click', loadDashboardData);
     
     // Handle window resize for chart responsiveness
     let resizeTimeout;
@@ -413,3 +396,4 @@ style.textContent = `
     }
 `;
 document.head.appendChild(style);
+})();

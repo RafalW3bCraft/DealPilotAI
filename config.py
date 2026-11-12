@@ -3,10 +3,28 @@ import re
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 import logging
+from urllib.parse import urlsplit
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+
+def validate_app_base_url(value: str) -> str:
+    """A configured origin, never an untrusted request Host header."""
+    try:
+        parsed = urlsplit(value)
+        valid = (not any(c.isspace() or c == '\\' for c in value)
+                 and parsed.hostname and not parsed.username and not parsed.password
+                 and not parsed.query and not parsed.fragment
+                 and parsed.path in ('', '/') and parsed.port != 0
+                 and (parsed.scheme == 'https' or
+                      (parsed.scheme == 'http' and parsed.hostname in {'localhost', '127.0.0.1', '::1'})))
+    except ValueError:
+        valid = False
+    if not valid:
+        raise RuntimeError('APP_BASE_URL must be an HTTPS origin (HTTP is allowed for loopback only).')
+    return value.rstrip('/')
 
 
 class Config:
@@ -37,6 +55,7 @@ class Config:
         
         self.FLASK_HOST = os.getenv('FLASK_HOST', '0.0.0.0')
         self.FLASK_PORT = int(os.getenv('FLASK_PORT', '5000'))
+        self.APP_BASE_URL = validate_app_base_url(os.getenv('APP_BASE_URL', 'http://127.0.0.1:5000').strip())
         self.PREFERRED_URL_SCHEME = os.getenv('PREFERRED_URL_SCHEME', 'http').strip().lower()
         if self.PREFERRED_URL_SCHEME not in {'http', 'https'}:
             raise RuntimeError("PREFERRED_URL_SCHEME must be 'http' or 'https'.")
@@ -60,6 +79,10 @@ class Config:
 
         # Dashboard authentication for privileged routes (/users, /merchant, /api/users ...).
         self.DASHBOARD_TOKEN = os.getenv('DASHBOARD_TOKEN', '').strip()
+        if self.DASHBOARD_TOKEN and (len(self.FLASK_SECRET_KEY) < 16 or self.FLASK_SECRET_KEY == 'demo-only-insecure-secret'):
+            raise RuntimeError('FLASK_SECRET_KEY must be private and at least 16 characters when merchant authentication is configured.')
+        if not self.DEMO_MODE and self.FLASK_SECRET_KEY == 'demo-only-insecure-secret':
+            raise RuntimeError('FLASK_SECRET_KEY demo value is forbidden outside offline demo mode.')
         if not self.DASHBOARD_TOKEN and not self.DEMO_MODE:
             logger.warning(
                 "DASHBOARD_TOKEN not set - privileged dashboard/API routes will be disabled"
@@ -79,6 +102,8 @@ class Config:
             )
         self.PAYPAL_CLIENT_ID = os.getenv('PAYPAL_CLIENT_ID', '').strip()
         self.PAYPAL_CLIENT_SECRET = os.getenv('PAYPAL_CLIENT_SECRET', '').strip()
+        if self.PAYPAL_CLIENT_ID and self.PAYPAL_CLIENT_SECRET and (len(self.FLASK_SECRET_KEY) < 16 or self.FLASK_SECRET_KEY == 'demo-only-insecure-secret'):
+            raise RuntimeError('FLASK_SECRET_KEY must be private and at least 16 characters when PayPal is configured.')
         self.PAYPAL_WEBHOOK_ID = os.getenv('PAYPAL_WEBHOOK_ID', '').strip()
         self.PAYPAL_CURRENCY = os.getenv('PAYPAL_CURRENCY', 'USD').strip().upper()
 
@@ -86,6 +111,13 @@ class Config:
         self.FEATHERLESS_API_KEY = os.getenv('FEATHERLESS_API_KEY', '').strip()
         self.FEATHERLESS_BASE_URL = os.getenv('FEATHERLESS_BASE_URL', 'https://api.featherless.ai/v1').strip()
         self.AI_MODEL = os.getenv('AI_MODEL', '').strip()
+        self.AI_RESPONSE_FORMAT = os.getenv('AI_RESPONSE_FORMAT', 'auto').strip().lower()
+        if self.AI_RESPONSE_FORMAT not in {'auto', 'json_object', 'prompt'}:
+            raise RuntimeError('AI_RESPONSE_FORMAT must be auto, json_object, or prompt.')
+        self.AI_TIMEOUT_SECONDS = float(os.getenv('AI_TIMEOUT_SECONDS', '20'))
+        self.AI_MAX_RETRIES = int(os.getenv('AI_MAX_RETRIES', '1'))
+        if not 0 < self.AI_TIMEOUT_SECONDS <= 60 or not 0 <= self.AI_MAX_RETRIES <= 2:
+            raise RuntimeError('AI timeout must be 0..60 seconds and retries 0..2.')
         configured_provider = os.getenv('AI_PROVIDER', '').strip().lower()
         if configured_provider and configured_provider not in {'openai', 'featherless'}:
             raise RuntimeError("AI_PROVIDER must be 'openai' or 'featherless'.")

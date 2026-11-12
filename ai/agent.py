@@ -27,10 +27,6 @@ from ai.providers import select_provider
 
 logger = logging.getLogger(__name__)
 
-_OPENAI_DEFAULT_MODEL = "gpt-4o-mini"
-_FEATHERLESS_DEFAULT_MODEL = "meta-llama/Meta-Llama-3.1-8B-Instruct"
-_FEATHERLESS_BASE_URL = "https://api.featherless.ai/v1"
-
 _PRICE_RE = re.compile(r"\$\s?(\d+(?:\.\d{1,2})?)")
 _URGENCY_RE = re.compile(
     r"(only\s+\d+\s+left|\d+\s+in\s+stock|selling\s+fast|almost\s+gone|hurry)",
@@ -113,6 +109,10 @@ class AIShoppingService:
             return
 
         selection = select_provider(config)
+        response_format = _getattr(config, 'AI_RESPONSE_FORMAT', 'auto')
+        if response_format not in {'auto', 'json_object', 'prompt'}:
+            raise ValueError('AI_RESPONSE_FORMAT must be auto, json_object, or prompt')
+        self.response_format = ('json_object' if selection['name'] == 'openai' else 'prompt') if response_format == 'auto' else response_format
         if selection["name"]:
             self._client = type(self)._build_openai_client(**selection["client_kwargs"])
             self.provider_name = selection["name"]
@@ -121,11 +121,8 @@ class AIShoppingService:
 
     @staticmethod
     def _build_openai_client(**kwargs: Any) -> Any:
-        try:
-            import openai  # deferred: only needed when a provider is used
-        except ImportError as exc:  # pragma: no cover
-            raise RuntimeError("openai SDK required for provider-backed mode") from exc
-        return openai.OpenAI(**kwargs)
+        from ai.providers import build_client
+        return build_client(kwargs)
 
     # -- public API ------------------------------------------------------
 
@@ -133,21 +130,26 @@ class AIShoppingService:
         self,
         query: str,
         locale: str = "en",
-        budget_hint: Decimal | None = None,
+        budget_hint: Decimal | str | int | float | None = None,
         actor_id: str = "anon",
     ) -> AIRecommendation:
+        # Validate before provider calls, rate limits, or fallback. Explicit zero
+        # is a real budget. When both inputs exist, use the tighter constraint.
+        budget_hint = self._validated_budget(budget_hint)
+        parsed_budget = self._parse_budget(query)
+        budgets = [b for b in (budget_hint, parsed_budget) if b is not None]
+        budget = min(budgets) if budgets else None
         if not self._bucket.allow(actor_id):
             logger.info("rate limit hit actor=%s", actor_id[:16])
-            rec = self._deterministic_fallback(query, locale, budget_hint)
+            rec = self._deterministic_fallback(query, locale, budget)
             rec.provider = "deterministic-fallback(rate-limited)"
             if "rate limit exceeded" not in rec.missing_info:
                 rec.missing_info.append("rate limit exceeded")
             return rec
 
         if self._provider_callable is None and self._client is None:
-            return self._deterministic_fallback(query, locale, budget_hint)
+            return self._deterministic_fallback(query, locale, budget)
 
-        budget = self._parse_budget(query) or budget_hint
         try:
             messages = self._build_messages(query, locale, budget)
             raw = self._call_provider(messages)
@@ -161,7 +163,7 @@ class AIShoppingService:
                 self.provider_name,
                 type(exc).__name__,
             )
-            rec = self._deterministic_fallback(query, locale, budget_hint)
+            rec = self._deterministic_fallback(query, locale, budget)
             rec.provider = f"deterministic-fallback(provider-error:{type(exc).__name__})"
             rec.missing_info.append(f"ai provider error: {type(exc).__name__}")
             return rec
@@ -177,8 +179,8 @@ class AIShoppingService:
             )
         except ToolError:
             rows = []
-        if not rows:  # broad fallback snapshot so the model sees the catalog
-            rows = self.tools.catalog_search(query="", limit=8)
+        if not rows:  # Let the model consider semantic matches; never relax budget.
+            rows = self.tools.catalog_search(query="", budget_max=budget, limit=8)
         catalog_block = "\n".join(
             f"- sku={html.escape(str(r['sku']), quote=True)} "
             f"| title={html.escape(str(r['title']), quote=True)} "
@@ -204,13 +206,8 @@ class AIShoppingService:
     def _call_provider(self, messages: list[dict]) -> str:
         if self._provider_callable is not None:
             return self._provider_callable(messages)
-        response = self._client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            response_format={"type": "json_object"},
-            temperature=0.2,
-        )
-        return response.choices[0].message.content or ""
+        from ai.providers import complete
+        return complete(self._client, self.model, messages, self.response_format) or ''
 
     # -- grounding ---------------------------------------------------------
 
@@ -222,116 +219,120 @@ class AIShoppingService:
         data.pop("fallback", None)
         rec = AIRecommendation.model_validate(data)  # extra='forbid'
 
+        # Model prose can invent discounts, shipping, or stock in any language.
+        # Use model selection/ranking and quantities, but author every displayed
+        # commercial statement from the validated catalog and policy below.
+        hindi = locale.lower().startswith("hi")
+        rec.intent_summary = ("आपकी खोज के लिए कैटलॉग सुझाव।" if hindi
+                              else "Catalog recommendations for your search.")
+        rec.tradeoffs = ("हर विकल्प अलग खरीद है; कार्ट का कुल मूल्य नीचे है।" if hindi
+                         else "Recommendations are alternatives; cart totals use catalog prices.")
+        rec.missing_info = []
         grounded_items: list[RecommendationItem] = []
+        seen: set[str] = set()
         for item in rec.items:
             product = self.catalog.get_product(item.sku)
             if product is None:
                 rec.missing_info.append(f"dropped unknown sku: {item.sku}")
                 continue
+            if item.sku in seen or not product.active or product.stock < 1:
+                continue
+            seen.add(item.sku)
+            if budget is not None and product.price > budget:
+                continue
             catalog_price = str(product.price)
             if item.price != catalog_price:
-                rec.tradeoffs += (
-                    f" Corrected price for {item.sku} to catalog value "
-                    f"{catalog_price} {product.currency}."
-                )
-                item.price = catalog_price
+                rec.tradeoffs += f" Corrected price for {item.sku} to catalog value {catalog_price} {product.currency}."
+            # Keep sanitized diagnostics, never the model's claim itself.
+            if any(m.group(1) != catalog_price for m in _PRICE_RE.finditer(item.reason)):
+                rec.tradeoffs += " Removed an unverified price claim."
+            if _URGENCY_RE.search(item.reason):
+                rec.tradeoffs += " Removed an unverified urgency/stock claim."
+            item.price = catalog_price
             item.currency = str(product.currency)
-            item.reason = self._sanitize_reason(item.reason, product, rec)
-            if budget is not None:
-                try:
-                    if Decimal(catalog_price) > budget:
-                        rec.tradeoffs += (
-                            f" {item.sku} is above your stated budget of {budget}."
-                        )
-                except InvalidOperation:
-                    pass
+            item.reason = self._catalog_reason(product, hindi)
             grounded_items.append(item)
-        rec.items = grounded_items[:4]
+        rec.items = grounded_items
 
         grounded_cart: list[CartProposalItem] = []
+        cart_seen: set[str] = set()
+        total = Decimal("0")
+        currency = None
         for entry in rec.cart_proposal:
-            if self.catalog.get_product(entry.sku) is None:
+            product = self.catalog.get_product(entry.sku)
+            if product is None:
                 rec.missing_info.append(f"dropped unknown sku in cart: {entry.sku}")
                 continue
+            if (entry.sku in cart_seen or not product.active
+                    or product.stock < entry.quantity):
+                continue
+            cart_seen.add(entry.sku)
+            if currency is not None and product.currency != currency:
+                continue
+            line_total = product.price * entry.quantity
+            if budget is not None and total + line_total > budget:
+                continue
+            total += line_total
+            currency = product.currency
             grounded_cart.append(entry)
         rec.cart_proposal = grounded_cart
-
-        if budget is None and self._parse_budget(query) is None:
-            if not any("budget" in m.lower() for m in rec.missing_info):
-                rec.missing_info.append("budget not specified")
+        if grounded_cart:
+            rec.tradeoffs += (f" कार्ट: {total:.2f} {currency}." if hindi
+                              else f" Proposed cart: {total:.2f} {currency}.")
+        if budget is None:
+            rec.missing_info.append("बजट निर्दिष्ट नहीं है" if hindi else "budget not specified")
+        if not rec.items:
+            rec.missing_info.append("कोई उपलब्ध विकल्प नहीं; खोज या बजट बदलें।" if hindi
+                                    else "No available matches; refine your search or budget.")
         return rec
 
-    def _sanitize_reason(self, reason: str, product: Any, rec: AIRecommendation) -> str:
-        catalog_price = str(product.price)
-        for match in _PRICE_RE.finditer(reason):
-            if match.group(1) != catalog_price:
-                rec.tradeoffs += (
-                    f" Removed an unverified price claim for {product.sku}."
-                )
-                return "Recommended based on your query and catalog availability."
-        if _URGENCY_RE.search(reason):
-            rec.tradeoffs += (
-                f" Removed an unverified urgency/stock claim for {product.sku}."
-            )
-            return "Recommended based on your query and catalog availability."
-        return reason
+    @staticmethod
+    def _catalog_reason(product: Any, hindi: bool) -> str:
+        # Titles are merchant-authored; do not echo untrusted model explanations
+        # or catalog descriptions that may contain instructions.
+        if hindi:
+            return f"उत्पाद: {product.title}; कैटलॉग मूल्य {product.price} {product.currency}; उपलब्ध।"
+        return f"{product.title}; catalog price {product.price} {product.currency}; available."
+
+    @staticmethod
+    def _validated_budget(value: Any) -> Decimal | None:
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, (Decimal, str, int, float)):
+            raise ValueError("budget must be a finite nonnegative amount")
+        try:
+            amount = Decimal(str(value))
+        except InvalidOperation as exc:
+            raise ValueError("budget must be a finite nonnegative amount") from exc
+        if not amount.is_finite() or amount < 0:
+            raise ValueError("budget must be a finite nonnegative amount")
+        return amount
 
     # -- deterministic fallback ---------------------------------------------
 
     def _deterministic_fallback(
         self, query: str, locale: str, budget_hint: Decimal | None
     ) -> AIRecommendation:
-        budget = budget_hint or self._parse_budget(query)
+        budget = budget_hint if budget_hint is not None else self._parse_budget(query)
         hindi = locale.lower().startswith("hi")
         try:
-            rows = self.tools.catalog_search(query=query or "", budget_max=budget, limit=8)
+            rows = self.tools.catalog_search(query=query or "", budget_max=budget, limit=4)
         except ToolError:
             rows = []
-        if not rows:
-            rows = self.tools.catalog_search(query="", budget_max=budget, limit=8)
-        rows = sorted(rows, key=lambda r: Decimal(r["price"]))[:4]
-
-        if hindi:
-            reason = "आपकी खोज और बजट के आधार पर यह उत्पाद उपयुक्त है।"
-            summary = "आपकी खोज के आधार पर कैटलॉग से चुने गए सुझाव।"
-            tradeoffs = "कीमत के अनुसार क्रमबद्ध; सभी कीमतें कैटलॉग से सत्यापित हैं।"
-            no_budget = "बजट निर्दिष्ट नहीं है"
-        else:
-            reason = "Matches your query and budget based on the catalog."
-            summary = "Catalog-based picks for your query."
-            tradeoffs = "Ranked by price; all prices verified against the catalog."
-            no_budget = "budget not specified"
-
-        items = [
-            RecommendationItem(
-                sku=r["sku"],
-                reason=reason,
-                price=r["price"],
-                currency=r["currency"],
-            )
-            for r in rows
-        ]
-        if budget is not None:
-            for r in rows:
-                if Decimal(r["price"]) > budget:
-                    tradeoffs += (
-                        f" {r['sku']} is above your stated budget of {budget}."
-                        if not hindi
-                        else f" {r['sku']} आपके बजट {budget} से अधिक है।"
-                    )
-        missing: list[str] = []
-        if budget is None:
-            missing.append(no_budget)
-        return AIRecommendation(
-            intent_summary=summary,
-            items=items,
-            tradeoffs=tradeoffs.strip(),
-            missing_info=missing,
+        # Never substitute unrelated products when no tokens match.
+        payload = AIRecommendation(
+            intent_summary="", items=[RecommendationItem(
+                sku=r["sku"], reason="", price=r["price"], currency=r["currency"]
+            ) for r in rows],
             cart_proposal=[CartProposalItem(sku=r["sku"], quantity=1) for r in rows[:2]],
             confidence="low",
-            provider="deterministic-fallback",
-            fallback=True,
         )
+        rec = self._parse_and_ground(payload.model_dump_json(), query, locale, budget)
+        rec.tradeoffs = ("कीमत और खोज के मिलान के अनुसार; कैटलॉग तथ्य सत्यापित। " if hindi
+                         else "Ranked by search match and price; catalog facts verified. ") + rec.tradeoffs
+        rec.provider = "deterministic-fallback"
+        rec.fallback = True
+        return rec
 
     @staticmethod
     def _parse_budget(query: str) -> Decimal | None:

@@ -12,6 +12,8 @@ import re
 from decimal import Decimal
 from pathlib import Path
 
+from ai.search import relevance
+
 from .exceptions import CatalogError
 from .schemas import CatalogProduct
 
@@ -77,23 +79,16 @@ class Catalog:
         budget_max: Decimal | None = None,
         limit: int = 8,
     ) -> list[CatalogProduct]:
-        results = [p for p in self._products.values() if p.active]
+        results = [p for p in self._products.values() if p.active and p.stock > 0]
         if query:
-            needle = query.casefold()
-            results = [
-                p
-                for p in results
-                if needle in p.title.casefold()
-                or needle in p.description.casefold()
-                or needle in p.category.casefold()
-            ]
+            results = [p for p in results if relevance(query, p.title, p.category, p.description)]
         if category:
             cat = category.casefold()
             results = [p for p in results if p.category.casefold() == cat]
         if budget_max is not None:
             results = [p for p in results if p.price <= budget_max]
         # Deterministic order: price ascending, then sku as stable tie-break.
-        results.sort(key=lambda p: (p.price, p.sku))
+        results.sort(key=lambda p: (-relevance(query or "", p.title, p.category, p.description), p.price, p.sku))
         return results[:limit]
 
     def get_product(self, sku: str) -> CatalogProduct | None:

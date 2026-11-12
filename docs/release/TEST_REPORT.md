@@ -1,65 +1,55 @@
-# Test and Validation Report
+# Test and validation report — November 11, 2026
 
-- **Assessment date:** 2026-11-05
-- **HEAD:** `f758a163f2683d56c2c90bc85bcb9a653977c144`
-- **Tested source:** HEAD plus the current uncommitted backend, storefront, security-test, and browser-test changes. These results are not GitHub Actions evidence.
+Source: `codex/paypal-final-submission-2026`, HEAD `23f23d0bfbd26c638adb973ba9a7d937ecba89d5` plus the repair diff. These are local working-tree results, not final-candidate GitHub Actions evidence. [Machine-readable verification](../evidence/local_verification.json) records the tested source fingerprint and summarized results.
 
-## Environment and isolation
+## Environment and results
 
-- Python 3.14.2 in the existing virtual environment.
-- A fresh virtual environment at `/tmp/dealpilot-clean-2026` installed `requirements-dev.txt` successfully on Python 3.14.2; its full pytest run passed.
-- `tests/conftest.py` now disables dotenv and clears external provider/payment credentials before application imports, so tests do not consume local `.env` credentials.
-- The fresh-venv run also used a cleared environment; no credential values were loaded or printed.
-- No dependency manifests were changed.
-- No PostgreSQL test service was available/configured, so PostgreSQL-specific transaction and multiworker concurrency checks were not run.
+A fresh Python **3.14.9** environment installed `requirements-dev.txt`, including the runtime lockfile. Dependency consistency passed; the final installer dry run required no changes. Tests disable dotenv and isolate credentials. PostgreSQL **17** ran against an expendable UTF-8 database named `dealpilot_test`; Chromium provided real browser execution with controlled payment boundaries.
 
-## Results
+| Check | State | Result |
+|---|---|---|
+| Automated suite | PASS | **257 passed; zero failures, errors or skips**, 71.92 seconds |
+| Browser scenarios | PASS | **16**, included in the total; desktop/mobile checkout, recovery, malicious content and legacy views |
+| Real PostgreSQL tests | PASS | **3**, included in the total; transactions and competing capture finalization |
+| Coverage: ai, commerce, paypal_checkout, web | PASS | **81.69%** statement coverage; 2,160 / 2,644 statements; required minimum 80% |
+| Clean pinned Python installation | PASS | Python 3.14.9; requirements-dev.txt and lockfile |
+| Compilation, dependency consistency, Ruff | PASS | Project compilation, pip check, configured correctness rules |
+| JavaScript syntax and diff whitespace | PASS | Both application scripts; git diff --check |
+| Lockfile vulnerability audit | PASS | pip-audit reported no known vulnerabilities |
+| Working-source secret review | PASS | Scanner candidates are synthetic negative URL fixtures; credential validity not tested |
+| Historical credential revocation | BLOCKED | One old non-placeholder database credential candidate; operator confirmation required |
+| Repaired candidate CI | NOT RUN | Repair diff remains local; prior baseline CI succeeded |
 
-| Check | Result |
-|---|---|
-| `python -m compileall -q .` | PASS |
-| `python -m pip check` | PASS, no broken requirements |
-| `python -m ruff check .` | PASS under the checked-in correctness rules (`E9`, `F63`, `F7`, `F82`) |
-| `python -m pip_audit -r requirements.lock` | PASS, no known vulnerabilities reported |
-| Full pytest suite, including `tests/e2e/` | PASS: **152 collected, 152 passed, 0 failed, 0 skipped**; 6 warnings emitted |
-| Targeted coverage for `ai`, `commerce`, `paypal_checkout`, and `web` | PASS: **76% combined coverage**; the coverage run also reports 152 passed, 0 failed, 0 skipped and 112 warnings |
-| Focused routes, security, and browser tests | PASS: **30 passed**; includes landing-page rendering, merchant login/logout, CSRF/expiry, integer quantity validation, desktop/mobile checkout, and malicious AI text rendering |
-| `pip check`, Ruff, compileall, JavaScript syntax, and `git diff --check` | PASS |
-| `pip-audit -r requirements.lock` | PASS: no known vulnerabilities reported |
-| CI workflow YAML | PASS: `.github/workflows/ci.yml` parsed with Ruby's YAML parser; no workflow file changed in this worktree |
-| Current GitHub Actions workflow run | FAIL: run [41413708891](https://github.com/RafalW3bCraft/DealPilotAI/actions/runs/41413708891) failed on pre-correction source; no run exists for this uncommitted candidate |
+The suite emitted six existing `datetime.utcnow()` deprecation warnings. Coverage measures the four named packages, not the whole repository. Checkout service coverage is **71%**, storage **92%** and AI agent **96%**. Passing the combined threshold does not establish exhaustive payment-state or production coverage.
 
-Warnings include existing `datetime.utcnow()` deprecations, pytest-asyncio's unset fixture loop-scope notice, and SQLite resource warnings during coverage. They were not counted as skipped tests.
+## Scenarios exercised
 
-## Changes exercised
+Regressions cover real PayPal request callback fields, ownership before replay, paid and expired quote replay, ambiguity/recovery, atomic capture rollback and contention, terminal financial conflicts, distinct capture identities, UUID idempotency keys across installations, feature combinations, merchant session forgery, malformed quantities/budgets/bodies, unsafe deal/model content, catalog drift and strict proposed-cart budgets. Browser checks exercise selected recommendations, quantity edits, requoting, pending/canceled/failed/review feedback, mobile layouts, labels, keyboard focus and status announcements. This is not a comprehensive WCAG certification.
 
-The current candidate adds the commerce page shell and responsive layouts, browser-session merchant login/logout, stricter cart quantity validation, safer AI response rendering with `textContent`, explicit handling of pending checkout recovery, and stronger checkout replay/capture reconciliation checks. Regression tests cover the changed user and payment flows. These local results do not prove live AI inference, a real PayPal capture, production security, or CI.
+## Reproduce
 
-An initial run before test isolation, with local dotenv settings loaded, reported 14 failed and 138 passed. After adding test-only dotenv/credential isolation, both the ordinary project-venv run and the fresh-venv run pass all 152 tests.
-
-## Live checks and boundaries
-
-- **AI:** not rerun in this assessment. The latest recorded real call failed and used fallback; the affected credentials were identified for rotation before further live testing. See [AI evidence](AI_LIVE_EVIDENCE.md).
-- **PayPal:** no buyer-approved transaction or capture was performed. Historical sandbox OAuth is not capture evidence. See [PayPal evidence](PAYPAL_SANDBOX_EVIDENCE.md).
-- **Webhooks:** no real signed sandbox delivery or scheduled retry was demonstrated. See [webhook evidence](WEBHOOK_EVIDENCE.md).
-- **CI:** no successful run exists for this corrected working tree. GitHub CLI is not authenticated here.
-
-## Reproduction
+Install as documented in [README](../../README.md), then use an expendable PostgreSQL 17 database named **dealpilot_test**. The PostgreSQL tests truncate this database; never point them at application data. Without TEST_POSTGRES_URL, those tests skip and the result does not reproduce the zero-skip release run.
 
 ```bash
-env -i PATH="$PATH" HOME="$HOME" PYTHON_DOTENV_DISABLED=1 DEMO_MODE=true AI_PROVIDER= FEATHERLESS_API_KEY= OPENAI_API_KEY= \
-  .venv/bin/python -m compileall -q .
-env -i PATH="$PATH" HOME="$HOME" PYTHON_DOTENV_DISABLED=1 DEMO_MODE=true AI_PROVIDER= FEATHERLESS_API_KEY= OPENAI_API_KEY= \
-  .venv/bin/python -m pip check
-env -i PATH="$PATH" HOME="$HOME" PYTHON_DOTENV_DISABLED=1 DEMO_MODE=true AI_PROVIDER= FEATHERLESS_API_KEY= OPENAI_API_KEY= \
-  .venv/bin/python -m pytest -q --disable-warnings
-env -i PATH="$PATH" HOME="$HOME" PYTHON_DOTENV_DISABLED=1 DEMO_MODE=true AI_PROVIDER= FEATHERLESS_API_KEY= OPENAI_API_KEY= \
-  .venv/bin/python -m pytest --cov=ai --cov=commerce --cov=paypal_checkout --cov=web \
-  --cov-report=term-missing -q --disable-warnings
-env -i PATH="$PATH" HOME="$HOME" PYTHON_DOTENV_DISABLED=1 DEMO_MODE=true AI_PROVIDER= FEATHERLESS_API_KEY= OPENAI_API_KEY= \
-  .venv/bin/python -m ruff check .
-env -i PATH="$PATH" HOME="$HOME" PYTHON_DOTENV_DISABLED=1 DEMO_MODE=true AI_PROVIDER= FEATHERLESS_API_KEY= OPENAI_API_KEY= \
-  .venv/bin/python -m pip_audit -r requirements.lock
+export PYTHON_DOTENV_DISABLED=1 DEMO_MODE=true
+export TEST_POSTGRES_URL=postgresql://dealpilot@127.0.0.1:55489/dealpilot_test
+python -m pytest -q --tb=short --disable-warnings \
+  --junitxml=junit.xml \
+  --cov=ai --cov=commerce --cov=paypal_checkout --cov=web \
+  --cov-fail-under=80 --cov-report=term --cov-report=json:coverage.json
+python -m compileall -q ai commerce paypal_checkout web core scripts tests
+python -m pip check
+python -m ruff check .
+node --check static/checkout/checkout.js
+node --check static/js/dashboard.js
+python -m pip_audit -r requirements.lock
+git diff --check
 ```
 
-Real AI and PayPal smoke tests require separately provisioned, rotated credentials. They must not be run with exposed values or used as ordinary CI dependencies.
+The port above identifies the isolated service used for this assessment; provision your own database and adapt the connection URL. CI provisions its own PostgreSQL service. The final run's JUnit and coverage JSON were parsed to verify counts independently of terminal output.
+
+## Genuine integration and release limits
+
+Six genuine AI scenarios passed without fallback, and a real AI-to-cart browser rehearsal was captured. Real PayPal OAuth and order creation passed. Buyer-approved capture, full-process payment restart, and genuine signed webhook delivery remain **BLOCKED**. The prepared quote expired without approval; obtain a fresh quote when the buyer is ready. See [integration evidence](INTEGRATION_EVIDENCE.md), [audit](AUDIT.md) and [release gates](RELEASE_GATE_MATRIX.md).
+
+The successful [baseline CI run](https://github.com/RafalW3bCraft/DealPilotAI/actions/runs/42054489153) is for `75f25f0864701c1f72954a4fbda27a27f0806c5c`. It does not validate this unpublished repair diff. No deployment, publication or submission was performed.

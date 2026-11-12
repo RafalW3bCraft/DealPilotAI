@@ -38,7 +38,7 @@ class CartProposalItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     sku: str
-    quantity: int = Field(ge=1, le=10)
+    quantity: int = Field(strict=True, ge=1, le=10)
 
 
 class AIRecommendation(BaseModel):
@@ -50,7 +50,7 @@ class AIRecommendation(BaseModel):
     items: list[RecommendationItem] = Field(default_factory=list, max_length=4)
     tradeoffs: str = ""
     missing_info: list[str] = Field(default_factory=list)
-    cart_proposal: list[CartProposalItem] = Field(default_factory=list)
+    cart_proposal: list[CartProposalItem] = Field(default_factory=list, max_length=4)
     confidence: Literal["high", "medium", "low"] = "low"
     provider: str = ""
     fallback: bool = False

@@ -14,6 +14,7 @@ if str(ROOT) not in sys.path:
 def _env(monkeypatch, tmp_path, **overrides):
     env = {
         'DEMO_MODE': 'true',
+        'FLASK_SECRET_KEY': 'test-private-session-key-0123456789',
         'ENABLE_MERCHANT_CHECKOUT': 'true',
         'COMMERCE_DATABASE_URL': f"sqlite:///{tmp_path}/commerce_test.db",
         'PAYPAL_CLIENT_ID': '',

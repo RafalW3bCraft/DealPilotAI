@@ -13,12 +13,25 @@ jobs:
   test:
     name: Python 3.14 checks
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: dealpilot
+          POSTGRES_PASSWORD: ephemeral-test-password
+          POSTGRES_DB: dealpilot_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dealpilot -d dealpilot_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       PYTHON_DOTENV_DISABLED: "1"
       DEMO_MODE: "true"
       AI_PROVIDER: ""
       OPENAI_API_KEY: ""
       FEATHERLESS_API_KEY: ""
+      TEST_POSTGRES_URL: postgresql://dealpilot:ephemeral-test-password@127.0.0.1:5432/dealpilot_test
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -47,13 +60,11 @@ jobs:
       - name: Install Chromium for browser tests
         run: python -m playwright install --with-deps chromium
 
-      - name: Unit and integration tests
-        run: python -m pytest -q --junitxml=junit.xml
-
-      - name: Coverage
+      - name: Tests and coverage
         run: >-
           python -m pytest --cov=ai --cov=commerce --cov=paypal_checkout --cov=web
-          --cov-report=term-missing --cov-report=xml --junitxml=coverage-junit.xml -q
+          --cov-fail-under=80
+          --cov-report=term-missing --cov-report=xml --junitxml=junit.xml -q
 
       - name: Dependency vulnerability audit
         run: python -m pip_audit -r requirements.lock
@@ -68,7 +79,6 @@ jobs:
           name: python-test-evidence
           path: |
             junit.xml
-            coverage-junit.xml
             coverage.xml
           if-no-files-found: warn
           retention-days: 14

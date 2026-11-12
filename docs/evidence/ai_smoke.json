@@ -1,13 +1,18 @@
 {
-  "timestamp_utc": "2026-11-05T09:21:19.264677+00:00",
-  "provider": "deterministic-fallback(provider-error:JSONDecodeError)",
+  "timestamp_utc": "2026-11-11T12:07:33.746226+00:00",
+  "provider": "featherless",
   "model": "Qwen/Qwen3.8-27B",
-  "fallback": true,
+  "fallback": false,
   "query": "Find the best desk setup under $80. I prefer a compact LED lamp and a desk organizer. Explain the tradeoffs.",
   "items": [
     {
-      "sku": "DP-PLANT-008",
-      "price": "9.99",
+      "sku": "DP-LAMP-001",
+      "price": "24.99",
+      "currency": "USD"
+    },
+    {
+      "sku": "DP-TRAY-002",
+      "price": "18.50",
       "currency": "USD"
     },
     {
@@ -16,18 +21,16 @@
       "currency": "USD"
     },
     {
-      "sku": "DP-PAD-005",
-      "price": "15.75",
-      "currency": "USD"
-    },
-    {
-      "sku": "DP-TRAY-002",
-      "price": "18.50",
+      "sku": "DP-PLANT-008",
+      "price": "9.99",
       "currency": "USD"
     }
   ],
-  "confidence": "low",
-  "grounding_failures": [
-    "provider fell back to deterministic mode (not a real AI pass)"
-  ]
+  "confidence": "high",
+  "grounding_failures": [],
+  "status": "PASS",
+  "explanations": "server-authored catalog facts; provider selects products and quantities",
+  "response_format": "prompt",
+  "source_head": "23f23d0bfbd26c638adb973ba9a7d937ecba89d5",
+  "source_scope": "release repair working tree at time of live execution"
 }

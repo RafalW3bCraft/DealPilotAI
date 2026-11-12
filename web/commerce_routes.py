@@ -414,7 +414,8 @@ def _build_services(config):
 
     # PayPal + checkout lane
     paypal_client = None
-    if getattr(config, 'PAYPAL_CLIENT_ID', '') and getattr(config, 'PAYPAL_CLIENT_SECRET', ''):
+    if (getattr(config, 'ENABLE_MERCHANT_CHECKOUT', True) and
+            getattr(config, 'PAYPAL_CLIENT_ID', '') and getattr(config, 'PAYPAL_CLIENT_SECRET', '')):
         try:
             from paypal_checkout.client import PayPalClient  # type: ignore
             paypal_client = PayPalClient(
@@ -586,6 +587,7 @@ def create_commerce_blueprint(config):
             'csrf_token': csrf_token(),
             'demo_mode': bool(getattr(config, 'DEMO_MODE', False)),
             'merchant_name': MERCHANT_NAME,
+            'merchant_demo_open': bool(getattr(config, 'DEMO_MODE', False) and not getattr(config, 'DASHBOARD_TOKEN', '')),
         }
 
     # -- public pages ------------------------------------------------------
@@ -605,6 +607,8 @@ def create_commerce_blueprint(config):
         return render_template(
             'shop.html', products=products, labels=labels, lang=lang,
             ai_enabled=svc.get('ai_service') is not None,
+            checkout_enabled=svc.get('checkout_service') is not None,
+            cart_enabled=bool(getattr(config, 'ENABLE_MERCHANT_CHECKOUT', True) and svc.get('cart_service')),
             affiliate_enabled=bool(getattr(config, 'ENABLE_EXTERNAL_AFFILIATE', False)),
         )
 
@@ -647,6 +651,16 @@ def create_commerce_blueprint(config):
         query = query.strip()
         locale = str(data.get('locale', request.args.get('lang', 'en')))[:8]
         budget = data.get('budget')
+        if budget is not None:
+            from decimal import Decimal, InvalidOperation
+            try:
+                if isinstance(budget, bool) or not isinstance(budget, (int, float, str)):
+                    raise ValueError('invalid budget')
+                budget = Decimal(str(budget))
+                if not budget.is_finite() or budget < 0:
+                    raise ValueError('invalid budget')
+            except (ValueError, InvalidOperation):
+                return jsonify({'error': 'budget must be a finite nonnegative amount'}), 400
         try:
             rec = ai.recommend(query, locale=locale, budget_hint=budget, actor_id=actor)
         except Exception as e:
@@ -696,6 +710,8 @@ def create_commerce_blueprint(config):
 
     @bp.route('/cart/quote', methods=['POST'])
     def cart_quote():
+        if not getattr(config, 'ENABLE_MERCHANT_CHECKOUT', True):
+            return jsonify({'error': 'merchant cart is disabled'}), 503
         if not verify_csrf():
             return jsonify({'error': 'invalid or missing CSRF token'}), 403
         svc = _services()
@@ -739,8 +755,10 @@ def create_commerce_blueprint(config):
                 from commerce.schemas import CartItem  # type: ignore
                 cart_items = [CartItem(sku=i['sku'], quantity=i['quantity']) for i in clean]
             except Exception:
-                cart_items = clean
+                return jsonify({'error': 'quantities must be integers between 1 and 10'}), 400
         else:
+            if any(not 1 <= item['quantity'] <= 10 for item in clean):
+                return jsonify({'error': 'quantities must be integers between 1 and 10'}), 400
             cart_items = clean
         try:
             quote = cart.create_quote(actor, cart_items)
@@ -790,6 +808,8 @@ def create_commerce_blueprint(config):
                 error = 'Could not load quote.'
         return render_template(
             'cart.html', quote=quote, error=error,
+            checkout_enabled=svc.get('checkout_service') is not None,
+            cart_enabled=bool(getattr(config, 'ENABLE_MERCHANT_CHECKOUT', True) and svc.get('cart_service')),
             labels=vm.labels_for(request.args.get('lang', 'en')),
             fulfillment=vm.FULFILLMENT_TEXT,
             message=request.args.get('message', ''),
@@ -799,6 +819,8 @@ def create_commerce_blueprint(config):
 
     @bp.route('/checkout/start', methods=['POST'])
     def checkout_start():
+        if not getattr(config, 'ENABLE_MERCHANT_CHECKOUT', True):
+            return jsonify({'error': 'merchant checkout is disabled'}), 503
         if not verify_csrf():
             return jsonify({'error': 'invalid or missing CSRF token'}), 403
         svc = _services()
@@ -812,8 +834,12 @@ def create_commerce_blueprint(config):
                 'error': 'checkout unavailable',
                 'detail': 'PayPal sandbox is not configured on this server',
             }), 503
-        data = request.get_json(silent=True) or {}
-        quote_id = str(data.get('quote_id', ''))
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({'error': 'a JSON object is required'}), 400
+        quote_id = data.get('quote_id')
+        if not isinstance(quote_id, str):
+            return jsonify({'error': 'quote_id must be a string'}), 400
         if not quote_id:
             return jsonify({'error': 'quote_id required'}), 400
         try:
@@ -824,28 +850,36 @@ def create_commerce_blueprint(config):
             return jsonify({'error': 'quote expired'}), 410
         except _err('QuoteStale'):
             return jsonify({'error': 'quote is stale; refresh your cart'}), 409
+        except _err('QuoteNotOpen'):
+            return jsonify({'error': 'quote is not open; create a new quote'}), 409
         except _err('AmbiguousCheckoutError'):
-            return jsonify({'error': 'checkout state ambiguous; merchant will reconcile'}), 202
+            attempt = svc['storage'].get_attempt(request_id=checkout._request_id(quote_id, actor))
+            return jsonify({'error': 'Payment outcome needs review. Do not create another payment.',
+                'status': 'REQUIRES_REVIEW', 'requires_review': True,
+                'attempt_id': attempt.id if attempt else None,
+                'order_url': url_for('commerce.order_status', attempt_id=attempt.id) if attempt else None}), 409
         except _err('CheckoutError') as e:
             return jsonify({'error': f'checkout failed: {e}'}), 502
         except Exception as e:
             logger.error(f'checkout_start unexpected: {e}')
             return jsonify({'error': 'checkout failed'}), 500
+        status = result.get('status')
+        payload = dict(result)
+        payload['order_url'] = url_for('commerce.order_status', attempt_id=result['attempt_id'])
+        if status == 'PAID':
+            return jsonify(payload), 200
+        if status in {'FAILED', 'CANCELED', 'REQUIRES_REVIEW'}:
+            payload['error'] = ('Payment needs merchant review; keep this order reference.'
+                                if status == 'REQUIRES_REVIEW' else 'Checkout is closed. Create a new cart quote to try again.')
+            return jsonify(payload), 409
         if not result.get('approve_url'):
-            return jsonify({
-                'error': 'approval link is not available yet',
-                'detail': 'The existing checkout is being recovered. Retry shortly; a duplicate PayPal order will not be created.',
-                'attempt_id': result.get('attempt_id'),
-                'status': result.get('status'),
-            }), 202
-        return jsonify({
-            'approve_url': result.get('approve_url'),
-            'attempt_id': result.get('attempt_id'),
-        })
+            payload['detail'] = 'Approval is being recovered. View the order status before retrying.'
+            return jsonify(payload), 202
+        return jsonify(payload), 200
 
     @bp.route('/checkout')
     def checkout_page():
-        return render_template('checkout.html', quote_id=request.args.get('quote_id', ''))
+        return render_template('checkout.html', quote_id=request.args.get('quote_id', ''), checkout_enabled=_services().get('checkout_service') is not None)
 
     # -- PayPal return / cancel ----------------------------------------------
 
@@ -858,7 +892,7 @@ def create_commerce_blueprint(config):
         storage = svc.get('storage')
         checkout = svc.get('checkout_service')
         attempt = _fetch_attempt(storage, token) if storage is not None else None
-        if attempt is None:
+        if attempt is None or attempt.get('paypal_order_id') != token:
             logger.info(f'/paypal/return unknown token (no state change): {token[:8]}…')
             return redirect(url_for('commerce.cart', message='Unknown or expired PayPal order.'))
         attempt_id = attempt['attempt_id']
@@ -880,15 +914,6 @@ def create_commerce_blueprint(config):
         status = str((result or {}).get('status', ''))
         if status == 'PAID':
             return redirect(url_for('commerce.order_status', attempt_id=attempt_id, receipt='1'))
-        if status in ('CAPTURE_PENDING', 'PENDING'):
-            aid = str(attempt_id or '')
-            return render_template('order_status.html', order={
-                'attempt_id': aid, 'masked_id': aid[-6:],
-                'status': 'CAPTURE_PENDING', 'status_label': 'Capture pending',
-                'is_final': False, 'amount': '', 'currency': '', 'capture_id': '',
-                'verified': False, 'verified_at': '', 'created_at': '', 'updated_at': '',
-                'sandbox_note': vm.SANDBOX_RECEIPT_NOTE,
-            }, pending=True)
         return redirect(url_for('commerce.order_status', attempt_id=attempt_id))
 
     @bp.route('/paypal/cancel')
@@ -939,7 +964,9 @@ def create_commerce_blueprint(config):
         if not _can_view(attempt):
             return jsonify({'error': 'order not found'}), 404
         order = vm.order_vm(attempt, capture)
-        receipt = request.args.get('receipt') == '1'
+        storage = _services().get('storage')
+        order['requires_review'] = bool(storage and hasattr(storage, 'has_payment_conflict') and storage.has_payment_conflict(attempt['attempt_id']))
+        receipt = request.args.get('receipt') == '1' and order['status'] == 'PAID' and order['verified'] and not order['requires_review']
         return render_template('order_status.html', order=order, receipt=receipt, pending=False)
 
     @bp.route('/orders/<attempt_id>/status.json')
@@ -958,13 +985,38 @@ def create_commerce_blueprint(config):
                     attempt, capture = _load_attempt(attempt_id)
                 except Exception as e:
                     logger.warning(f'reconcile failed for {attempt_id}: {e}')
-        return jsonify(vm.order_vm(attempt, capture))
+        payload = vm.order_vm(attempt, capture)
+        payload['requires_review'] = bool(svc.get('storage') and hasattr(svc['storage'], 'has_payment_conflict') and svc['storage'].has_payment_conflict(attempt['attempt_id']))
+        return jsonify(payload)
 
     # -- merchant dashboard -----------------------------------------------------
 
+    @bp.route('/merchant/orders/<int:attempt_id>/recover', methods=['POST'])
+    @require_merchant
+    def merchant_recover_order(attempt_id):
+        if not verify_csrf():
+            return jsonify({'error': 'invalid or missing CSRF token'}), 403
+        checkout = _services().get('checkout_service')
+        if checkout is None:
+            return jsonify({'error': 'checkout unavailable'}), 503
+        data = request.get_json(silent=True) if request.is_json else request.form
+        if not hasattr(data, 'get'):
+            return jsonify({'error': 'an order ID is required'}), 400
+        order_id = data.get('paypal_order_id')
+        if not isinstance(order_id, str) or not order_id.isalnum() or len(order_id) > 64:
+            return jsonify({'error': 'a valid PayPal order ID is required'}), 400
+        try:
+            result = checkout.recover_created_order(attempt_id, order_id)
+        except Exception as exc:
+            logger.warning('merchant recovery failed category=%s', type(exc).__name__)
+            return jsonify({'error': 'Order could not be verified against the original quote and attempt.'}), 409
+        if request.is_json:
+            return jsonify(result)
+        return redirect(url_for('commerce.merchant'))
+
     @bp.route('/merchant/login', methods=['GET', 'POST'])
     def merchant_login():
-        if getattr(config, 'DEMO_MODE', False) or is_merchant(config):
+        if (getattr(config, 'DEMO_MODE', False) and not getattr(config, 'DASHBOARD_TOKEN', '')) or is_merchant(config):
             return redirect(url_for('commerce.merchant'))
 
         services = _services()
@@ -1028,7 +1080,10 @@ def create_commerce_blueprint(config):
                     if d is None:
                         continue
                     capture = d.pop('capture', None) or _fetch_capture(storage, d.get('attempt_id'))
-                    orders.append(vm.order_vm(d, capture))
+                    view = vm.order_vm(d, capture)
+                    view['requires_review'] = hasattr(storage, 'has_payment_conflict') and storage.has_payment_conflict(d['attempt_id'])
+                    view['recovery_needed'] = d.get('status') == 'REQUIRES_REVIEW' and not d.get('paypal_order_id')
+                    orders.append(view)
             except Exception as e:
                 logger.error(f'/merchant list_orders error: {e}')
             try:

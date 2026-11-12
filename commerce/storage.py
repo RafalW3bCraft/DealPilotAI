@@ -30,6 +30,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy.dialects.postgresql import UUID
 
 from .exceptions import DuplicateCapture, DuplicateRequest, InvalidStateTransition
 from .schemas import CartQuoteData, CatalogProduct, QuoteLine
@@ -64,7 +65,7 @@ class CartQuote(Base):
     __tablename__ = "cart_quotes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    quote_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    quote_id: Mapped[str] = mapped_column(String(64).with_variant(UUID(as_uuid=False), 'postgresql'), unique=True, nullable=False)
     actor_id: Mapped[str] = mapped_column(String(64), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     items_json: Mapped[str] = mapped_column(JSON, nullable=False)
@@ -264,6 +265,12 @@ class CommerceStorage:
             return row
 
     def get_quote(self, quote_id: str) -> CartQuote | None:
+        if self.is_postgres:
+            from uuid import UUID as ParseUUID
+            try:
+                quote_id = str(ParseUUID(str(quote_id)))
+            except (ValueError, TypeError, AttributeError):
+                return None
         with self._session_factory() as s:
             return s.scalar(select(CartQuote).where(CartQuote.quote_id == quote_id))
 
@@ -319,6 +326,19 @@ class CommerceStorage:
             row = s.get(CheckoutAttempt, attempt_id)
             if row is not None:
                 row.paypal_order_id = paypal_order_id
+
+    def attach_review_order(self, attempt_id: int, paypal_order_id: str) -> None:
+        from sqlalchemy import update
+        with self._session_factory.begin() as s:
+            result = s.execute(update(CheckoutAttempt).where(
+                CheckoutAttempt.id == attempt_id,
+                CheckoutAttempt.status == 'REQUIRES_REVIEW',
+                CheckoutAttempt.paypal_order_id.is_(None),
+            ).values(paypal_order_id=paypal_order_id, status='AWAITING_BUYER_APPROVAL'))
+            if result.rowcount != 1:
+                raise InvalidStateTransition('checkout recovery was already processed')
+            s.add(AuditAction(actor_id='merchant', operation='RECOVER_CREATED_ORDER',
+                subject_id=str(attempt_id), status='VERIFIED', correlation_id=paypal_order_id))
 
     def get_attempt(
         self,
@@ -392,6 +412,66 @@ class CommerceStorage:
             )
 
     # -- captures -------------------------------------------------------
+
+    def finalize_capture(self, attempt_id: int, capture_id: str, amount: Decimal,
+                         currency: str, verified_at: datetime) -> dict:
+        """Commit the verified financial record and local outcome atomically.
+
+        A completed remote payment against a locally canceled/failed order is
+        durable financial evidence requiring review, never a successful receipt.
+        """
+        from sqlalchemy import update
+
+        with self._session_factory.begin() as s:
+            if self.engine.dialect.name == 'sqlite':
+                s.connection().exec_driver_sql('BEGIN IMMEDIATE')
+            attempt = s.scalar(select(CheckoutAttempt).where(
+                CheckoutAttempt.id == attempt_id).with_for_update())
+            if attempt is None:
+                raise InvalidStateTransition('unknown checkout attempt')
+            existing = s.scalar(select(PaymentCapture).where(
+                PaymentCapture.paypal_capture_id == capture_id))
+            if existing is not None and (
+                existing.checkout_attempt_id != attempt_id or existing.amount != amount
+                or existing.currency != currency or existing.status != 'COMPLETED'
+            ):
+                raise DuplicateCapture('capture identity conflicts with persisted payment')
+            other = s.scalar(select(PaymentCapture).where(
+                PaymentCapture.checkout_attempt_id == attempt_id,
+                PaymentCapture.paypal_capture_id != capture_id).limit(1))
+            if other is not None:
+                if s.scalar(select(AuditAction.id).where(
+                    AuditAction.operation == 'PAYMENT_STATE_CONFLICT',
+                    AuditAction.subject_id == capture_id)) is None:
+                    s.add(AuditAction(actor_id='system:paypal', operation='PAYMENT_STATE_CONFLICT',
+                        subject_id=capture_id, status='REQUIRES_REVIEW', correlation_id=str(attempt_id)))
+                if attempt.status not in {'PAID', 'FAILED', 'CANCELED'}:
+                    attempt.status = 'REQUIRES_REVIEW'
+                return {'attempt_id': attempt_id, 'status': attempt.status,
+                        'requires_review': True, 'capture_id': other.paypal_capture_id}
+            if existing is None:
+                s.add(PaymentCapture(checkout_attempt_id=attempt_id,
+                    paypal_capture_id=capture_id, amount=amount, currency=currency,
+                    status='COMPLETED', verified_at=verified_at.replace(tzinfo=None)))
+            if attempt.status in {'FAILED', 'CANCELED'}:
+                if s.scalar(select(AuditAction.id).where(
+                    AuditAction.operation == 'PAYMENT_STATE_CONFLICT',
+                    AuditAction.subject_id == capture_id)) is None:
+                    s.add(AuditAction(actor_id='system:paypal', operation='PAYMENT_STATE_CONFLICT',
+                        subject_id=capture_id, status='REQUIRES_REVIEW', correlation_id=str(attempt_id)))
+                return {'attempt_id': attempt_id, 'status': attempt.status,
+                        'requires_review': True, 'capture_id': capture_id}
+            attempt.status = 'PAID'
+            attempt.updated_at = datetime.now(UTC).replace(tzinfo=None)
+            s.execute(update(CartQuote).where(CartQuote.id == attempt.cart_quote_id).values(status='PAID'))
+            s.flush()
+            return {'attempt_id': attempt_id, 'status': 'PAID', 'capture_id': capture_id}
+
+    def has_payment_conflict(self, attempt_id: int) -> bool:
+        with self._session_factory() as s:
+            return s.scalar(select(AuditAction.id).where(
+                AuditAction.operation == 'PAYMENT_STATE_CONFLICT',
+                AuditAction.correlation_id == str(attempt_id)).limit(1)) is not None
 
     def record_capture(
         self,
