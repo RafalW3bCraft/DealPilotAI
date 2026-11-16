@@ -58,6 +58,26 @@ def service(storage, clock):
     return CartService(Catalog(CATALOG_PATH), storage, FakeConfig(), clock=clock)
 
 
+def test_sqlite_init_survives_a_create_all_race(tmp_path, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+    from commerce.storage import Base
+
+    url = f"sqlite:///{tmp_path}/commerce.db"
+    first = CommerceStorage(url)
+    assert first.ready()
+
+    def already_exists(*args, **kwargs):
+        raise OperationalError(
+            "CREATE TABLE merchant_products",
+            {},
+            Exception("table merchant_products already exists"),
+        )
+
+    monkeypatch.setattr(Base.metadata, "create_all", already_exists)
+    second = CommerceStorage(url)
+    assert second.ready()
+
+
 def test_decimal_totals_exact(service):
     quote = service.create_quote(
         "actor-1",

@@ -33,8 +33,12 @@
     </article>
     <article class="dp-lane-card dp-lane-affiliate">
       <span class="dp-lane-icon" aria-hidden="true">02</span>
+      {% if affiliate_enabled %}
       <div><h2>Explore community deals</h2><p>{{ labels.lane2 }}</p></div>
       <a class="dp-lane-arrow" href="{{ url_for('deals_page') }}" aria-label="Explore community deals">↗</a>
+      {% else %}
+      <div><h2>Community deals</h2><p>External affiliate checkout is off in this demo. Prices and payment stay on the merchant catalog.</p></div>
+      {% endif %}
     </article>
   </section>
 

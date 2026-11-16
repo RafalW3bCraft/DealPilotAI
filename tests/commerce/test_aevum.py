@@ -140,6 +140,35 @@ def test_paid_invoice_rejects_a_second_transaction(tmp_path):
     assert rpc.calls == [("eth_chainId", []), ("eth_getTransactionReceipt", [TX])]
 
 
+def test_rpc_transport_errors_are_not_a_payment(monkeypatch):
+    from urllib.error import URLError
+
+    from integrations.aevum.rpc import JsonRpc
+
+    def broken(*_args, **_kwargs):
+        raise URLError("down")
+
+    monkeypatch.setattr("integrations.aevum.rpc.urlopen", broken)
+    with pytest.raises(PaymentUnverified):
+        JsonRpc("https://rpc-test.qday.info").call("eth_chainId", [])
+
+    class ErrorBody:
+        status = 200
+
+        def read(self):
+            return b'{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"no"}}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr("integrations.aevum.rpc.urlopen", lambda *_args, **_kwargs: ErrorBody())
+    with pytest.raises(PaymentUnverified):
+        JsonRpc("https://rpc-test.qday.info").call("eth_chainId", [])
+
+
 def test_failed_transaction_status_is_not_paid(tmp_path):
     settler, store, _rpc = _settler(
         tmp_path,

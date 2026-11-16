@@ -303,6 +303,9 @@ class _RateBucket:
 # Service factory
 # ---------------------------------------------------------------------------
 
+_services_lock = threading.Lock()
+
+
 def _build_services(config):
     """Create/cache lane services on current_app.extensions['dealpilot'].
     Each lane is independent; failures log and disable only that lane."""
@@ -310,6 +313,19 @@ def _build_services(config):
     ext = app.extensions.setdefault('dealpilot', {})
     if ext.get('services_built'):
         return ext
+    # The first browser request and a parallel probe both enter this factory.
+    # Two SQLite create_all calls then race, and the loser used to disable
+    # durable storage for the whole process.
+    _services_lock.acquire()
+    try:
+        if ext.get('services_built'):
+            return ext
+        return _populate_services(config, app, ext)
+    finally:
+        _services_lock.release()
+
+
+def _populate_services(config, app, ext):
     ext['config'] = config
 
     # Catalog lane
@@ -588,6 +604,7 @@ def create_commerce_blueprint(config):
             'demo_mode': bool(getattr(config, 'DEMO_MODE', False)),
             'merchant_name': MERCHANT_NAME,
             'merchant_demo_open': bool(getattr(config, 'DEMO_MODE', False) and not getattr(config, 'DASHBOARD_TOKEN', '')),
+            'affiliate_enabled': bool(getattr(config, 'ENABLE_EXTERNAL_AFFILIATE', False)),
         }
 
     # -- public pages ------------------------------------------------------
@@ -926,7 +943,11 @@ def create_commerce_blueprint(config):
                 'attempt_id': attempt.id if attempt else None,
                 'order_url': url_for('commerce.order_status', attempt_id=attempt.id) if attempt else None}), 409
         except _err('CheckoutError') as e:
-            return jsonify({'error': f'checkout failed: {e}'}), 502
+            logger.error('checkout_start failed: %s', type(e).__name__)
+            return jsonify({
+                'error': 'checkout failed',
+                'detail': 'PayPal did not accept this checkout. No payment was captured.',
+            }), 502
         except Exception as e:
             logger.error(f'checkout_start unexpected: {e}')
             return jsonify({'error': 'checkout failed'}), 500
@@ -1026,9 +1047,9 @@ def create_commerce_blueprint(config):
     @bp.route('/orders/<attempt_id>')
     def order_status(attempt_id):
         attempt, capture = _load_attempt(attempt_id)
-        if attempt is None:
-            return jsonify({'error': 'order not found'}), 404
-        if not _can_view(attempt):
+        if attempt is None or not _can_view(attempt):
+            if 'text/html' in request.headers.get('Accept', ''):
+                return render_template('order_status.html', order=None, receipt=False, pending=False), 404
             return jsonify({'error': 'order not found'}), 404
         order = vm.order_vm(attempt, capture)
         storage = _services().get('storage')

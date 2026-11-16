@@ -12,6 +12,7 @@ from integrations.telegraph.errors import (
     BudgetExceeded,
     InvalidQuote,
     InvalidResponse,
+    PaymentRejected,
     PaymentRequired,
     ProviderTimeout,
     UnsupportedIntent,
@@ -306,3 +307,21 @@ def test_route_requires_authorization_and_can_return_paid_evidence(monkeypatch, 
     body = accepted.get_json()
     assert body["intelligence"]["paid"] is True
     assert body["products"][0]["price"] == "24.99"
+
+
+def test_signer_refuses_to_mark_paid_when_x402_is_missing(monkeypatch):
+    import builtins
+
+    from integrations.telegraph.signing import X402ExactSigner
+
+    real_import = builtins.__import__
+
+    def hiding_x402(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "x402" or name.startswith("x402."):
+            raise ImportError(name)
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", hiding_x402)
+    signer = X402ExactSigner("0x" + "11" * 32, "eip155:11155111")
+    with pytest.raises(PaymentRejected):
+        signer({"x402Version": 2, "accepts": []})

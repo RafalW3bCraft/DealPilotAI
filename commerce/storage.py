@@ -28,7 +28,7 @@ from sqlalchemy import (
     inspect,
     select,
 )
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -174,7 +174,13 @@ class CommerceStorage:
         if self.is_postgres:
             self._apply_migration()
         else:
-            Base.metadata.create_all(self.engine)
+            try:
+                Base.metadata.create_all(self.engine)
+            except OperationalError as exc:
+                # A second process can pass the existence check and then lose
+                # the CREATE. The table is already there; keep going.
+                if "already exists" not in str(exc).lower():
+                    raise
             self._apply_sqlite_migrations()
 
     def _apply_sqlite_migrations(self) -> None:

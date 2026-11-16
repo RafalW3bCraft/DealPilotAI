@@ -56,8 +56,13 @@ def test_shop_page_lists_catalog_and_lanes(monkeypatch, tmp_path):
     body = resp.get_data(as_text=True)
     assert 'DP-LAMP-001' in body
     assert 'Lane 1: Merchant store' in body
-    assert 'Lane 2: Amazon deals' in body
+    assert 'External affiliate checkout is off' in body
+    assert 'Lane 2: Amazon deals' not in body
     assert 'Shop the merchant catalog' in body
+    (tmp_path / 'affiliate').mkdir()
+    affiliate = _make_app(monkeypatch, tmp_path / 'affiliate', ENABLE_EXTERNAL_AFFILIATE='true')
+    affiliate_body = affiliate.test_client().get('/shop').get_data(as_text=True)
+    assert 'Lane 2: Amazon deals' in affiliate_body
 
 
 def test_landing_page_uses_commerce_shell(monkeypatch, tmp_path):
@@ -328,3 +333,63 @@ def test_ready_503_when_checkout_enabled_without_creds(monkeypatch, tmp_path):
     assert resp.status_code == 503
     checks = resp.get_json()['checks']
     assert checks['paypal_credentials_present'] is False
+
+
+def test_missing_order_is_html_for_a_browser_and_json_for_an_api_client(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    client = app.test_client()
+    page = client.get('/orders/missing-order', headers={'Accept': 'text/html'})
+    assert page.status_code == 404
+    text = page.get_data(as_text=True)
+    assert 'Order not found' in text
+    assert 'No payment was recorded' in text
+    api = client.get('/orders/missing-order', headers={'Accept': 'application/json'})
+    assert api.status_code == 404
+    assert api.get_json()['error'] == 'order not found'
+
+
+def test_checkout_error_does_not_return_the_exception_text(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    from commerce.exceptions import CheckoutError
+
+    class Checkout:
+        def start_checkout(self, actor, quote_id, buyer_id):
+            raise CheckoutError('gateway body contained /tmp/secret-trace')
+
+    app.extensions['dealpilot']['checkout_service'] = Checkout()
+    client = app.test_client()
+    token = _csrf(client)
+    quote_id = client.post(
+        '/cart/quote',
+        json={'items': [{'sku': 'DP-LAMP-001', 'quantity': 1}]},
+        headers={'X-CSRF-Token': token},
+    ).get_json()['quote_id']
+    resp = client.post(
+        '/checkout/start',
+        json={'quote_id': quote_id},
+        headers={'X-CSRF-Token': token},
+    )
+    assert resp.status_code == 502
+    body = resp.get_json()
+    assert body['error'] == 'checkout failed'
+    assert 'secret-trace' not in resp.get_data(as_text=True)
+    assert 'approve_url' not in body
+
+
+def test_offline_cart_explains_that_paypal_approval_is_unavailable(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    client = app.test_client()
+    token = _csrf(client)
+    quote_id = client.post(
+        '/cart/quote',
+        json={'items': [{'sku': 'DP-LAMP-001', 'quantity': 2}]},
+        headers={'X-CSRF-Token': token},
+    ).get_json()['quote_id']
+    page = client.get('/cart', query_string={'quote_id': quote_id}).get_data(as_text=True)
+    assert '49.98' in page
+    assert 'id="dp-checkout-btn"' in page
+    assert 'PayPal approval is not available' in page
+    assert 'You will review and approve payment on PayPal Sandbox.' not in page
+    shop = client.get('/shop').get_data(as_text=True)
+    assert 'External affiliate checkout is off' in shop
+    assert 'checkout on Amazon' not in shop

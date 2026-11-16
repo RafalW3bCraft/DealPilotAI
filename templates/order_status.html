@@ -2,6 +2,15 @@
 {% block title %}{% if receipt %}Receipt{% else %}Order status{% endif %} · DealPilot{% endblock %}
 {% block content %}
 <main class="dp-page dp-receipt-page" id="main-content">
+  {% if not order %}
+  <nav class="dp-breadcrumbs" aria-label="Breadcrumb"><a href="{{ url_for('commerce.shop') }}">Shop</a><span aria-hidden="true">/</span><span aria-current="page">Order status</span></nav>
+  <section class="dp-panel dp-receipt-card" aria-labelledby="receipt-title">
+    <p class="dp-eyebrow">ORDER UPDATE</p>
+    <h1 id="receipt-title">Order not found</h1>
+    <p class="dp-alert dp-alert-warn" role="alert">This reference does not match an order in this session. No payment was recorded.</p>
+    <a class="dp-btn dp-btn-secondary" href="{{ url_for('commerce.shop') }}">Back to the store</a>
+  </section>
+  {% else %}
   <nav class="dp-breadcrumbs" aria-label="Breadcrumb"><a href="{{ url_for('commerce.shop') }}">Shop</a><span aria-hidden="true">/</span><span aria-current="page">{% if receipt %}Receipt{% else %}Order status{% endif %}</span></nav>
   <section id="dp-order-status" data-status="{{ order.status }}" data-requires-review="{{ 'true' if order.requires_review or order.status == 'REQUIRES_REVIEW' else 'false' }}" data-status-url="{{ url_for('commerce.order_status_json', attempt_id=order.attempt_id) if order.attempt_id else '' }}" class="dp-panel dp-receipt-card" aria-labelledby="receipt-title">
     <div class="dp-receipt-mark {% if order.status == 'PAID' %}dp-receipt-success{% else %}dp-receipt-pending{% endif %}" aria-hidden="true">
@@ -25,6 +34,7 @@
     <p class="dp-safe-note">{{ order.sandbox_note }}</p>
     <a class="dp-btn dp-btn-secondary" href="{{ url_for('commerce.shop') }}">Back to the store</a>
   </section>
+  {% endif %}
 </main>
 {% endblock %}
 
