@@ -1,0 +1,9 @@
+{
+  "sdk": "openminion",
+  "version": "0.1.20",
+  "provider": "echo",
+  "model_backed": false,
+  "selected_sku": "HP-2",
+  "quote_total": "25.00",
+  "runtime_note": "openminion turn completed"
+}

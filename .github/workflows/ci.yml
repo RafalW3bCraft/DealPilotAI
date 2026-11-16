@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, hackathon-mania]
   pull_request:
-    branches: [main]
+    branches: [main, hackathon-mania]
 
 permissions:
   contents: read

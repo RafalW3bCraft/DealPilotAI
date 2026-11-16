@@ -168,7 +168,39 @@ class Config:
         
         admin_ids_str = os.getenv('ADMIN_USER_IDS', '')
         self.ADMIN_USER_IDS = [int(uid.strip()) for uid in admin_ids_str.split(',') if uid.strip().isdigit()] if admin_ids_str else []
-        
+
+        # Telegraph intelligence purchases stay off the PayPal path. The default
+        # networks are the public dev node's testnets. A private key is optional
+        # and is never logged.
+        self.TELEGRAPH_BASE_URL = os.getenv(
+            'TELEGRAPH_BASE_URL', 'https://devnode.telegraphprotocol.com'
+        ).strip().rstrip('/')
+        self.TELEGRAPH_NETWORK = os.getenv('TELEGRAPH_NETWORK', 'eip155:11155111').strip()
+        self.TELEGRAPH_MAX_SPEND_USDC = os.getenv('TELEGRAPH_MAX_SPEND_USDC', '0.05').strip()
+        self.TELEGRAPH_PRIVATE_KEY = os.getenv('TELEGRAPH_PRIVATE_KEY', '').strip()
+        self.TELEGRAPH_RECEIPT_DB = os.getenv(
+            'TELEGRAPH_RECEIPT_DB', 'telegraph_receipts.sqlite'
+        ).strip()
+        self.TELEGRAPH_TIMEOUT_SECONDS = float(os.getenv('TELEGRAPH_TIMEOUT_SECONDS', '20'))
+        allowed_networks = os.getenv(
+            'TELEGRAPH_ALLOWED_NETWORKS', 'eip155:11155111,eip155:84532'
+        )
+        self.TELEGRAPH_ALLOWED_NETWORKS = tuple(
+            item.strip() for item in allowed_networks.split(',') if item.strip()
+        )
+        if self.TELEGRAPH_PRIVATE_KEY:
+            hex_key = self.TELEGRAPH_PRIVATE_KEY[2:] if self.TELEGRAPH_PRIVATE_KEY.startswith('0x') else self.TELEGRAPH_PRIVATE_KEY
+            if len(hex_key) != 64 or any(c not in '0123456789abcdefABCDEF' for c in hex_key):
+                raise RuntimeError('TELEGRAPH_PRIVATE_KEY is not a 32-byte hex private key.')
+        if self.TELEGRAPH_NETWORK and self.TELEGRAPH_NETWORK not in self.TELEGRAPH_ALLOWED_NETWORKS:
+            raise RuntimeError('TELEGRAPH_NETWORK is not in TELEGRAPH_ALLOWED_NETWORKS.')
+        try:
+            spend = float(self.TELEGRAPH_MAX_SPEND_USDC)
+        except ValueError as exc:
+            raise RuntimeError('TELEGRAPH_MAX_SPEND_USDC must be a number.') from exc
+        if spend < 0 or self.TELEGRAPH_TIMEOUT_SECONDS <= 0 or self.TELEGRAPH_TIMEOUT_SECONDS > 60:
+            raise RuntimeError('Telegraph spend and timeout settings are out of range.')
+
         self._log_configuration()
     
     def _log_configuration(self):
