@@ -85,6 +85,13 @@ class AsyncDataManager:
         except Exception as e:
             logger.error(f"Error in async loop: {e}")
             self._initialized = True
+        finally:
+            loop = self._loop
+            if loop is not None and not loop.is_closed():
+                try:
+                    loop.close()
+                except Exception as close_error:
+                    logger.warning(f"AsyncDataManager loop close warning: {close_error}")
         
     def execute_async(self, coro):
         if not self._loop or not self._initialized:
@@ -102,14 +109,16 @@ class AsyncDataManager:
             return None
 
     def stop(self):
-        if self.db_manager and self._loop and self._loop.is_running():
+        loop = self._loop
+        loop_open = loop is not None and not loop.is_closed()
+        if self.db_manager and loop_open and loop.is_running():
             try:
                 close_coro = self.db_manager.close()
-                asyncio.run_coroutine_threadsafe(close_coro, self._loop).result(timeout=5)
+                asyncio.run_coroutine_threadsafe(close_coro, loop).result(timeout=5)
             except Exception as e:
                 logger.warning(f"AsyncDataManager DB close warning: {e}")
-        if self._loop and self._loop.is_running():
-            self._loop.call_soon_threadsafe(self._loop.stop)
+        if loop_open and loop.is_running():
+            loop.call_soon_threadsafe(loop.stop)
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=5.0)
         logger.info("AsyncDataManager stopped")

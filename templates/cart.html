@@ -43,7 +43,12 @@
       </p>
       <p class="dp-fulfillment">{{ fulfillment }}</p>
       {% if not checkout_enabled|default(true) %}
-        <p class="dp-alert dp-alert-info" role="status">Merchant checkout is currently unavailable. Your selections are saved in this browser.</p>
+        <p class="dp-alert dp-alert-info" role="status">Merchant checkout is currently unavailable. This quote stays in the demo session, and starting checkout will not create a payment.</p>
+        {% if cart_enabled|default(true) and not quote.expired %}
+        <button id="dp-checkout-btn" class="dp-btn dp-btn-primary dp-btn-block"
+                data-quote-id="{{ quote.quote_id }}">Check checkout <span aria-hidden="true">→</span></button>
+        <p id="dp-checkout-msg" class="dp-form-message" aria-live="polite" role="status"></p>
+        {% endif %}
       {% elif quote.expired %}
         <button class="dp-btn dp-btn-primary dp-btn-block" disabled
                 title="This quote has expired - request a new one">{{ labels.checkout }}</button>
@@ -53,7 +58,7 @@
                 data-quote-id="{{ quote.quote_id }}">{{ labels.checkout }} <span aria-hidden="true">→</span></button>
         <p id="dp-checkout-msg" class="dp-form-message" aria-live="polite" role="status"></p>
       {% endif %}
-      <p class="dp-safe-note"><span aria-hidden="true">✓</span> You will review and approve payment on PayPal Sandbox.</p>
+      <p class="dp-safe-note"><span aria-hidden="true">✓</span> {% if checkout_enabled|default(true) %}You will review and approve payment on PayPal Sandbox.{% else %}PayPal approval is not available until sandbox credentials are configured. No payment will be created.{% endif %}</p>
     </aside>
   </div>
   {% else %}

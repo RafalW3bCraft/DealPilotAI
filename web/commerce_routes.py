@@ -303,6 +303,9 @@ class _RateBucket:
 # Service factory
 # ---------------------------------------------------------------------------
 
+_services_lock = threading.Lock()
+
+
 def _build_services(config):
     """Create/cache lane services on current_app.extensions['dealpilot'].
     Each lane is independent; failures log and disable only that lane."""
@@ -310,6 +313,19 @@ def _build_services(config):
     ext = app.extensions.setdefault('dealpilot', {})
     if ext.get('services_built'):
         return ext
+    # The first browser request and a parallel probe both enter this factory.
+    # Two SQLite create_all calls then race, and the loser used to disable
+    # durable storage for the whole process.
+    _services_lock.acquire()
+    try:
+        if ext.get('services_built'):
+            return ext
+        return _populate_services(config, app, ext)
+    finally:
+        _services_lock.release()
+
+
+def _populate_services(config, app, ext):
     ext['config'] = config
 
     # Catalog lane
@@ -588,6 +604,7 @@ def create_commerce_blueprint(config):
             'demo_mode': bool(getattr(config, 'DEMO_MODE', False)),
             'merchant_name': MERCHANT_NAME,
             'merchant_demo_open': bool(getattr(config, 'DEMO_MODE', False) and not getattr(config, 'DASHBOARD_TOKEN', '')),
+            'affiliate_enabled': bool(getattr(config, 'ENABLE_EXTERNAL_AFFILIATE', False)),
         }
 
     # -- public pages ------------------------------------------------------
@@ -705,6 +722,73 @@ def create_commerce_blueprint(config):
             except Exception as e:
                 logger.debug(f'agent session record failed: {e}')
         return jsonify(out)
+
+    @bp.route('/api/intelligence/telegraph', methods=['POST'])
+    def telegraph_intelligence():
+        """Buyer-authorized Telegraph reference price. Catalog prices stay authoritative."""
+        if not verify_csrf():
+            return jsonify({'error': 'invalid or missing CSRF token'}), 403
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({'error': 'a JSON object is required'}), 400
+        query = data.get('query')
+        if not isinstance(query, str) or not query.strip() or len(query) > 500:
+            return jsonify({'error': 'query must be a non-empty string of at most 500 characters'}), 400
+        if data.get('buyer_authorized') is not True:
+            return jsonify({'error': 'explicit buyer authorization is required'}), 403
+        budget = data.get('budget_usdc')
+        if not isinstance(budget, str) or not budget.strip():
+            return jsonify({'error': 'budget_usdc must be a decimal string'}), 400
+        symbol = data.get('symbol')
+        if symbol is not None and not isinstance(symbol, str):
+            return jsonify({'error': 'symbol must be a string'}), 400
+        svc = _services()
+        catalog = svc.get('catalog')
+        if catalog is None:
+            return _lane_unavailable('catalog')
+        from integrations.telegraph.errors import (
+            AuthorizationDenied,
+            BudgetExceeded,
+            InvalidQuote,
+            InvalidResponse,
+            PaymentRejected,
+            PaymentRequired,
+            ProviderTimeout,
+            UnsupportedIntent,
+        )
+        from integrations.telegraph.workflow import build_workflow
+        try:
+            workflow = build_workflow(config, catalog)
+            result = workflow.advise(
+                query.strip(),
+                actor_id=ensure_actor(),
+                budget_usdc=budget.strip(),
+                buyer_authorized=True,
+                symbol=symbol,
+            )
+        except AuthorizationDenied as exc:
+            return jsonify({'error': str(exc)}), 403
+        except BudgetExceeded as exc:
+            return jsonify({'error': str(exc)}), 409
+        except (UnsupportedIntent, InvalidQuote, ValueError) as exc:
+            return jsonify({'error': str(exc)}), 422
+        except PaymentRequired as exc:
+            return jsonify({
+                'error': 'payment required',
+                'paid': False,
+                'networks': [
+                    item.get('network') for item in (exc.challenge.get('accepts') or [])
+                    if isinstance(item, dict)
+                ],
+            }), 402
+        except ProviderTimeout:
+            return jsonify({'error': 'intelligence provider timed out', 'paid': False}), 504
+        except (InvalidResponse, PaymentRejected) as exc:
+            return jsonify({'error': str(exc), 'paid': False}), 502
+        except Exception as exc:
+            logger.error('Telegraph intelligence failed: %s', type(exc).__name__)
+            return jsonify({'error': 'intelligence unavailable', 'paid': False}), 503
+        return jsonify(result)
 
     # -- cart / quote -------------------------------------------------------
 
@@ -859,7 +943,11 @@ def create_commerce_blueprint(config):
                 'attempt_id': attempt.id if attempt else None,
                 'order_url': url_for('commerce.order_status', attempt_id=attempt.id) if attempt else None}), 409
         except _err('CheckoutError') as e:
-            return jsonify({'error': f'checkout failed: {e}'}), 502
+            logger.error('checkout_start failed: %s', type(e).__name__)
+            return jsonify({
+                'error': 'checkout failed',
+                'detail': 'PayPal did not accept this checkout. No payment was captured.',
+            }), 502
         except Exception as e:
             logger.error(f'checkout_start unexpected: {e}')
             return jsonify({'error': 'checkout failed'}), 500
@@ -959,9 +1047,9 @@ def create_commerce_blueprint(config):
     @bp.route('/orders/<attempt_id>')
     def order_status(attempt_id):
         attempt, capture = _load_attempt(attempt_id)
-        if attempt is None:
-            return jsonify({'error': 'order not found'}), 404
-        if not _can_view(attempt):
+        if attempt is None or not _can_view(attempt):
+            if 'text/html' in request.headers.get('Accept', ''):
+                return render_template('order_status.html', order=None, receipt=False, pending=False), 404
             return jsonify({'error': 'order not found'}), 404
         order = vm.order_vm(attempt, capture)
         storage = _services().get('storage')

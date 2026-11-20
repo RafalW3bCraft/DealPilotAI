@@ -1,0 +1,7 @@
+{
+  "endpoint": "https://api.blockchair.com/bitcoin-cash/stats",
+  "best_block_height": 977651,
+  "transaction_requested": false,
+  "checkout_complete": false,
+  "funds_moved": false
+}

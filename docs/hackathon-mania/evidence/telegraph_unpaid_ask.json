@@ -1,0 +1,17 @@
+{
+  "environment": "https://devnode.telegraphprotocol.com",
+  "intent": "CRYPTO_PRICE_USD",
+  "symbol": "BTC",
+  "paid": false,
+  "outcome": "HTTP 402 payment required",
+  "networks": [
+    "eip155:11155111",
+    "eip155:84532",
+    "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
+  ],
+  "x402_version": 2,
+  "observed_on": "2026-11-16",
+  "command": "TELEGRAPH_LIVE=1 .venv/bin/python -m pytest tests/integration/test_telegraph_live.py -q",
+  "result": "1 passed",
+  "limitation": "No funded testnet signer was configured, so no USDC payment was signed or settled."
+}

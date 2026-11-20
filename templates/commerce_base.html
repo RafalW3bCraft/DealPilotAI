@@ -19,7 +19,7 @@
       </a>
       <nav class="dp-nav" aria-label="Main navigation">
         <a href="{{ url_for('commerce.shop') }}">Shop</a>
-        <a href="{{ url_for('deals_page') }}">Community deals</a>
+        {% if affiliate_enabled %}<a href="{{ url_for('deals_page') }}">Community deals</a>{% endif %}
         <a class="dp-nav-merchant" href="{{ url_for('commerce.merchant') }}">Merchant</a>
       </nav>
       <span class="dp-header-note"><span class="dp-dot" aria-hidden="true"></span>Sandbox demo</span>

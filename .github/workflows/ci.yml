@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, hackathon-mania]
   pull_request:
-    branches: [main]
+    branches: [main, hackathon-mania]
 
 permissions:
   contents: read
@@ -62,7 +62,7 @@ jobs:
 
       - name: Tests and coverage
         run: >-
-          python -m pytest --cov=ai --cov=commerce --cov=paypal_checkout --cov=web
+          python -m pytest --cov=ai --cov=commerce --cov=paypal_checkout --cov=web --cov=integrations
           --cov-fail-under=80
           --cov-report=term-missing --cov-report=xml --junitxml=junit.xml -q
 

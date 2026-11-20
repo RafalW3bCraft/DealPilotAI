@@ -1,0 +1,6 @@
+{
+  "rpc": "https://rpc-test.qday.info",
+  "chain_id": "0xabe5",
+  "decimal": 44005,
+  "paid": false
+}

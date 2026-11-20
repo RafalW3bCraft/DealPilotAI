@@ -1,0 +1,9 @@
+{
+  "rpc": "https://lasna-rpc.rnk.dev/",
+  "method": "eth_chainId",
+  "chain_id": "0x512577",
+  "decimal": 5318007,
+  "observed_testnet_hash": null,
+  "cross_chain_settled": false,
+  "funds_moved": false
+}
